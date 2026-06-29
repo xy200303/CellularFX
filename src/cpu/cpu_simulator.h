@@ -31,7 +31,7 @@ private:
     int active_max_y = 0;
 
     int thread_count = 4;
-    std::unique_ptr<ThreadPool> thread_pool;
+    mutable std::unique_ptr<ThreadPool> thread_pool;
 
     struct Region {
         bool valid = false;

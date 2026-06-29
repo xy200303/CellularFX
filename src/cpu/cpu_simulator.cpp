@@ -569,15 +569,30 @@ godot::Ref<godot::Image> CPUSimulator::get_image() {
 }
 
 int CPUSimulator::get_particle_count() const {
-    int count = 0;
-    for (int y = 0; y < height; y++) {
-        for (int x = 0; x < width; x++) {
-            if (grid.cell_current(x, y).material_id != 0) {
-                count++;
+    int bands = std::min(thread_count, std::max(1, height));
+    std::vector<int> counts(static_cast<size_t>(bands), 0);
+    for (int b = 0; b < bands; b++) {
+        int y0 = b * height / bands;
+        int y1 = (b + 1) * height / bands;
+        thread_pool->enqueue([&, y0, y1, b]() {
+            int c = 0;
+            for (int y = y0; y < y1; y++) {
+                for (int x = 0; x < width; x++) {
+                    if (grid.cell_current(x, y).material_id != 0) {
+                        c++;
+                    }
+                }
             }
-        }
+            counts[b] = c;
+        });
     }
-    return count;
+    thread_pool->wait_all();
+
+    int total = 0;
+    for (int c : counts) {
+        total += c;
+    }
+    return total;
 }
 
 void CPUSimulator::clear() {
