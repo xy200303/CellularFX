@@ -147,6 +147,20 @@ void CASWorld::register_material(const Ref<CASMaterial> &p_material) {
 	mat.type = static_cast<ca::MaterialType>(p_material->get_material_type());
 	mat.color = p_material->get_material_color();
 	mat.density = p_material->get_density();
+	mat.lifetime = static_cast<uint16_t>(p_material->get_lifetime());
+	mat.decay_to = std::string(p_material->get_decay_to().utf8().get_data());
+	mat.flammable = p_material->get_flammable();
+	mat.burn_to = std::string(p_material->get_burn_to().utf8().get_data());
+	mat.corrosive = p_material->get_corrosive();
+	mat.corrosion_residue = std::string(p_material->get_corrosion_residue().utf8().get_data());
+	mat.corrosion_chance = p_material->get_corrosion_chance();
+	mat.explosive = p_material->get_explosive();
+	mat.explode_to = std::string(p_material->get_explode_to().utf8().get_data());
+	mat.temperature = p_material->get_temperature();
+	mat.emit_light = p_material->get_emit_light();
+	mat.glow_color = p_material->get_glow_color();
+	mat.velocity_x = p_material->get_velocity_x();
+	mat.velocity_y = p_material->get_velocity_y();
 
 	ca::MaterialRegistry *reg = get_registry(simulator);
 	if (reg == nullptr) {

@@ -7,6 +7,11 @@ extends Node2D
 const MAT_SAND := "sand"
 const MAT_WATER := "water"
 const MAT_STONE := "stone"
+const MAT_FIRE := "fire"
+const MAT_SMOKE := "smoke"
+const MAT_WOOD := "wood"
+const MAT_OIL := "oil"
+const MAT_ACID := "acid"
 
 var current_material := MAT_SAND
 var brush_size := 4
@@ -18,26 +23,15 @@ func _ready() -> void:
 	# world.set_backend(CASWorld.BACKEND_GPU)
 	world.init(256, 256)
 
-	var sand := CASMaterial.new()
-	sand.material_name = MAT_SAND
-	sand.material_type = CASMaterial.TYPE_POWDER
-	sand.material_color = Color(0.76, 0.70, 0.50)
-	sand.density = 5
-	world.register_material(sand)
+	register_material(MAT_SAND, CASMaterial.TYPE_POWDER, Color(0.76, 0.70, 0.50), 5)
+	register_material(MAT_WATER, CASMaterial.TYPE_LIQUID, Color(0.25, 0.50, 1.0), 3)
+	register_material(MAT_STONE, CASMaterial.TYPE_SOLID, Color(0.5, 0.5, 0.5), 10)
 
-	var water := CASMaterial.new()
-	water.material_name = MAT_WATER
-	water.material_type = CASMaterial.TYPE_LIQUID
-	water.material_color = Color(0.25, 0.50, 1.0)
-	water.density = 3
-	world.register_material(water)
-
-	var stone := CASMaterial.new()
-	stone.material_name = MAT_STONE
-	stone.material_type = CASMaterial.TYPE_SOLID
-	stone.material_color = Color(0.5, 0.5, 0.5)
-	stone.density = 10
-	world.register_material(stone)
+	register_material(MAT_FIRE, CASMaterial.TYPE_GAS, Color(1.0, 0.4, 0.1), 0, 30, MAT_SMOKE)
+	register_material(MAT_SMOKE, CASMaterial.TYPE_GAS, Color(0.4, 0.4, 0.4), 0, 90, "")
+	register_material(MAT_WOOD, CASMaterial.TYPE_SOLID, Color(0.55, 0.27, 0.07), 10, 0, "", true, MAT_FIRE)
+	register_material(MAT_OIL, CASMaterial.TYPE_LIQUID, Color(0.2, 0.15, 0.1), 2, 0, "", true, MAT_FIRE)
+	register_material(MAT_ACID, CASMaterial.TYPE_LIQUID, Color(0.5, 1.0, 0.2), 2, 0, "", false, "", true, MAT_SMOKE, 0.15)
 
 	texture_rect.texture = world.get_texture()
 
@@ -52,7 +46,7 @@ func _process(_delta: float) -> void:
 	world.update()
 	var fps := Engine.get_frames_per_second()
 	var count := world.get_particle_count()
-	stats_label.text = "Backend: %s\nFPS: %d\nParticles: %d\nBrush: %s (1-3 switch, Space clear)" % [world.get_backend_name(), fps, count, current_material]
+	stats_label.text = "Backend: %s\nFPS: %d\nParticles: %d\nBrush: %s (1-8 switch, Space clear)" % [world.get_backend_name(), fps, count, current_material]
 
 
 func _input(event: InputEvent) -> void:
@@ -72,9 +66,40 @@ func _input(event: InputEvent) -> void:
 			KEY_3:
 				current_material = MAT_STONE
 				print("Brush: stone")
+			KEY_4:
+				current_material = MAT_FIRE
+				print("Brush: fire")
+			KEY_5:
+				current_material = MAT_SMOKE
+				print("Brush: smoke")
+			KEY_6:
+				current_material = MAT_WOOD
+				print("Brush: wood")
+			KEY_7:
+				current_material = MAT_OIL
+				print("Brush: oil")
+			KEY_8:
+				current_material = MAT_ACID
+				print("Brush: acid")
 			KEY_SPACE:
 				world.clear()
 				print("Cleared")
+
+
+func register_material(name: String, type: int, color: Color, density: int, lifetime: int = 0, decay_to: String = "", flammable: bool = false, burn_to: String = "", corrosive: bool = false, corrosion_residue: String = "", corrosion_chance: float = 0.1) -> void:
+	var mat := CASMaterial.new()
+	mat.material_name = name
+	mat.material_type = type
+	mat.material_color = color
+	mat.density = density
+	mat.lifetime = lifetime
+	mat.decay_to = decay_to
+	mat.flammable = flammable
+	mat.burn_to = burn_to
+	mat.corrosive = corrosive
+	mat.corrosion_residue = corrosion_residue
+	mat.corrosion_chance = corrosion_chance
+	world.register_material(mat)
 
 
 func _draw_at_mouse() -> void:

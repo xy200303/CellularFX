@@ -23,6 +23,10 @@ struct Cell {
         if (p_sleep) flags |= FLAG_SLEEP;
         else flags &= ~FLAG_SLEEP;
     }
+
+    // Bits 2-7 store a per-cell lifetime counter (0-63).
+    uint8_t get_lifetime() const { return flags >> 2; }
+    void set_lifetime(uint8_t p_life) { flags = (flags & 0x03) | ((p_life & 0x3F) << 2); }
 };
 
 } // namespace ca

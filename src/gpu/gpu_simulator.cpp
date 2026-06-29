@@ -9,6 +9,8 @@
 #include <godot_cpp/variant/utility_functions.hpp>
 #include <godot_cpp/variant/typed_array.hpp>
 
+#include <algorithm>
+
 namespace ca {
 
 GPUSimulator::~GPUSimulator() {
@@ -64,23 +66,56 @@ void GPUSimulator::update_materials_buffer() {
         count = MAX_MATERIALS;
     }
 
-    material_data.resize(count);
+    // Layout in GPU: uvec4 data[] where data[0].x = count and data[1+i*2..2+i*2] = material i.
+    material_data.resize((1 + count * MATERIAL_UVEC4) * MATERIAL_FLOATS);
+    memset(material_data.data(), 0, material_data.size() * 4);
+    material_data[0] = static_cast<uint32_t>(count);
     for (size_t i = 0; i < count; i++) {
         const Material *m = registry.get_material(static_cast<uint16_t>(i));
-        uint32_t packed = static_cast<uint32_t>(m->type) & 0xFFu;
-        packed |= (static_cast<uint32_t>(m->density) & 0xFFu) << 8;
-        material_data[i] = packed;
+        uint16_t burn_to_id = registry.get_material_id(m->burn_to);
+        uint16_t explode_to_id = registry.get_material_id(m->explode_to);
+        uint16_t decay_to_id = registry.get_material_id(m->decay_to);
+        uint16_t residue_id = registry.get_material_id(m->corrosion_residue);
+        uint32_t flags = 0u;
+        if (m->flammable) flags |= 1u << 0u;
+        if (m->corrosive) flags |= 1u << 1u;
+        if (m->explosive) flags |= 1u << 2u;
+        uint32_t chance_u8 = static_cast<uint32_t>(std::min(m->corrosion_chance, 1.0f) * 255.0f);
+
+        size_t base = (1 + i * MATERIAL_UVEC4) * MATERIAL_FLOATS;
+        material_data[base + 0] = (static_cast<uint32_t>(m->type) & 0xFFu)
+                                  | ((static_cast<uint32_t>(m->density) & 0xFFu) << 8u)
+                                  | ((static_cast<uint32_t>(m->lifetime) & 0xFFFFu) << 16u);
+        material_data[base + 1] = (static_cast<uint32_t>(burn_to_id) & 0xFFFFu)
+                                  | ((static_cast<uint32_t>(explode_to_id) & 0xFFFFu) << 16u);
+        material_data[base + 2] = (static_cast<uint32_t>(decay_to_id) & 0xFFFFu)
+                                  | ((static_cast<uint32_t>(residue_id) & 0xFFFFu) << 16u);
+        material_data[base + 3] = flags
+                                  | ((chance_u8 & 0xFFu) << 8u);
+
+        // Second uvec4: temperature, glow color, emit flag, velocity.
+        auto pack_color8 = [](const godot::Color &c) -> uint32_t {
+            uint32_t r = static_cast<uint32_t>(std::clamp(c.r, 0.0f, 1.0f) * 255.0f);
+            uint32_t g = static_cast<uint32_t>(std::clamp(c.g, 0.0f, 1.0f) * 255.0f);
+            uint32_t b = static_cast<uint32_t>(std::clamp(c.b, 0.0f, 1.0f) * 255.0f);
+            uint32_t a = static_cast<uint32_t>(std::clamp(c.a, 0.0f, 1.0f) * 255.0f);
+            return (r & 0xFFu) | ((g & 0xFFu) << 8u) | ((b & 0xFFu) << 16u) | ((a & 0xFFu) << 24u);
+        };
+        material_data[base + 4] = static_cast<uint32_t>(m->temperature);
+        material_data[base + 5] = pack_color8(m->glow_color);
+        material_data[base + 6] = m->emit_light ? 1u : 0u;
+        material_data[base + 7] = (static_cast<uint32_t>(m->velocity_x) & 0xFFFFu)
+                                  | ((static_cast<uint32_t>(m->velocity_y) & 0xFFFFu) << 16u);
     }
 
     // Pack data into the pre-allocated buffer region.
-    uint32_t buffer_size = 4 + MAX_MATERIALS * 4;
+    uint32_t buffer_size = (1 + MAX_MATERIALS * MATERIAL_UVEC4) * 4 * MATERIAL_FLOATS;
     godot::PackedByteArray data;
     data.resize(static_cast<int32_t>(buffer_size));
     uint8_t *ptr = data.ptrw();
     memset(ptr, 0, buffer_size);
-    *reinterpret_cast<uint32_t *>(ptr) = static_cast<uint32_t>(count);
     if (!material_data.empty()) {
-        memcpy(ptr + 4, material_data.data(), material_data.size() * 4);
+        memcpy(ptr, material_data.data(), material_data.size() * 4);
     }
 
     if (!materials_buf.is_valid()) {
@@ -128,7 +163,7 @@ void GPUSimulator::init(int p_width, int p_height) {
     valid = true;
 
     // Pre-create an empty material buffer so update_materials_buffer can update it in place.
-    materials_buf = rd->storage_buffer_create(4 + MAX_MATERIALS * 4);
+    materials_buf = rd->storage_buffer_create((1 + MAX_MATERIALS * MATERIAL_UVEC4) * 4 * MATERIAL_FLOATS);
     update_materials_buffer();
     create_uniform_sets();
 }
@@ -199,7 +234,8 @@ void GPUSimulator::update() {
         sync_gpu_from_cpu();
     }
 
-    for (int pass = 0; pass < 3; pass++) {
+    const int PASSES = 3;
+    for (int pass = 0; pass < PASSES; pass++) {
         godot::RID set = (current_is_a == (pass % 2 == 0)) ? uniform_set_a_to_b : uniform_set_b_to_a;
 
         godot::PackedByteArray push;
@@ -255,7 +291,12 @@ godot::Ref<godot::Image> GPUSimulator::get_image() {
         for (int x = 0; x < width; x++) {
             uint16_t mat_id = static_cast<uint16_t>(cpu_grid[cell_index(x, y)]);
             if (mat_id != 0 && mat_id < materials.size()) {
-                img->set_pixel(x, y, materials[mat_id].color);
+                const Material &mat = materials[mat_id];
+                if (mat.emit_light) {
+                    img->set_pixel(x, y, mat.glow_color);
+                } else {
+                    img->set_pixel(x, y, mat.color);
+                }
             }
         }
     }

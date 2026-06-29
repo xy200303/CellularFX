@@ -15,9 +15,10 @@ A high-performance **cellular automata / falling-sand engine** for Godot 4, writ
 - **Dual backends**: switch between CPU and GPU simulation at runtime.
   - CPU backend: single-threaded with active-region optimization.
   - GPU backend: Vulkan compute shader for massively parallel updates.
-- **Material system**: define materials as Godot `Resource` assets (name, type, color, density).
+- **Material system**: define materials as Godot `Resource` assets with physics and reaction rules.
   - Built-in material types: Solid, Powder, Liquid, Gas.
   - Behaviours: gravity, diagonal sliding, horizontal flow, density-based displacement.
+  - Reactions: lifetime/decay, flammability/burning, corrosion, explosion.
 - **Large grids**: efficiently simulate 256×256 to 1024×1024 worlds.
 - **Runtime API**: initialize, update, draw, clear, and switch backends from GDScript.
 - **Editor-friendly**: works directly inside the Godot editor; materials can be configured in the Inspector.
@@ -109,12 +110,21 @@ func _process(_delta):
 | `material_type` | `int` | `TYPE_SOLID`, `TYPE_POWDER`, `TYPE_LIQUID`, `TYPE_GAS`. |
 | `material_color` | `Color` | Display color. |
 | `density` | `int` | Used for displacement between same-type liquids. |
+| `lifetime` | `int` | Frames before the cell decays (`0` = infinite). |
+| `decay_to` | `String` | Material name to become when lifetime expires. |
+| `flammable` | `bool` | Catches fire when adjacent to a hot material. |
+| `burn_to` | `String` | Material name to become when ignited. |
+| `corrosive` | `bool` | Eats neighbouring non-corrosive materials. |
+| `corrosion_residue` | `String` | Material left behind after corrosion. |
+| `corrosion_chance` | `float` | Probability (0-1) to corrode a neighbour each frame. |
+| `explosive` | `bool` | Detonates when adjacent to a hot material. |
+| `explode_to` | `String` | Material to replace the 3×3 explosion area. |
 
 ## Backend Notes
 
 - **GPU backend** requires a windowed/GPU-capable Godot process. In `--headless` mode it automatically falls back to CPU.
-- GPU uses a Vulkan compute shader with 3 passes: vertical fall, diagonal slide, and horizontal liquid flow.
-- CPU uses an active-region scan so empty areas are skipped.
+- GPU uses a Vulkan compute shader with 3 passes: vertical fall, diagonal slide, and horizontal flow. Material properties are synchronised to the GPU for future reaction support.
+- CPU uses an active-region scan so empty areas are skipped and supports full reaction rules (burning, corrosion, explosion, lifetime).
 
 ## Building from Source
 
@@ -158,8 +168,8 @@ cellularfx/
 - [x] CPU backend MVP
 - [x] CPU active-region optimization
 - [x] GPU compute backend
-- [ ] More materials (fire, smoke, acid, magma, ice, oil, plants, explosives)
-- [ ] Data-driven material rules
+- [x] More materials and reaction rules (fire, smoke, acid, oil, wood, gunpowder)
+- [x] Data-driven material rules (lifetime, burning, corrosion, explosion)
 - [ ] Multi-threaded CPU backend
 - [ ] Editor plugin (brush tools, material palette, save/load)
 - [ ] World serialization
@@ -173,4 +183,3 @@ cellularfx/
 ## Acknowledgements
 
 Built with [godot-cpp](https://github.com/godotengine/godot-cpp).
-# CellularFX
