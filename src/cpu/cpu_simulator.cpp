@@ -11,6 +11,11 @@ namespace ca {
 CPUSimulator::CPUSimulator() {
     unsigned seed = static_cast<unsigned>(std::chrono::steady_clock::now().time_since_epoch().count());
     rng.seed(seed);
+    int hc = static_cast<int>(std::thread::hardware_concurrency());
+    thread_count = (hc > 0) ? hc : 4;
+    if (thread_count > 1) {
+        thread_count = std::max(2, thread_count - 1); // leave one core for the game thread
+    }
 }
 
 CPUSimulator::~CPUSimulator() {
@@ -44,6 +49,33 @@ void CPUSimulator::expand_active_region(int p_x, int p_y) {
         active_max_x = std::max(active_max_x, p_x);
         active_min_y = std::min(active_min_y, p_y);
         active_max_y = std::max(active_max_y, p_y);
+    }
+}
+
+void CPUSimulator::include_region(Region &r, int p_x, int p_y) {
+    if (!r.valid) {
+        r.min_x = r.max_x = p_x;
+        r.min_y = r.max_y = p_y;
+        r.valid = true;
+    } else {
+        r.min_x = std::min(r.min_x, p_x);
+        r.max_x = std::max(r.max_x, p_x);
+        r.min_y = std::min(r.min_y, p_y);
+        r.max_y = std::max(r.max_y, p_y);
+    }
+}
+
+void CPUSimulator::merge_region(Region &r_dst, const Region &r_src) {
+    if (!r_src.valid) {
+        return;
+    }
+    if (!r_dst.valid) {
+        r_dst = r_src;
+    } else {
+        r_dst.min_x = std::min(r_dst.min_x, r_src.min_x);
+        r_dst.max_x = std::max(r_dst.max_x, r_src.max_x);
+        r_dst.min_y = std::min(r_dst.min_y, r_src.min_y);
+        r_dst.max_y = std::max(r_dst.max_y, r_src.max_y);
     }
 }
 
@@ -192,8 +224,7 @@ void CPUSimulator::apply_reactions(int p_x, int p_y) {
     }
 }
 
-void CPUSimulator::apply_thermal_and_phase_changes(int p_min_x, int p_max_x, int p_min_y, int p_max_y) {
-    // Initialize temperatures in the next buffer from current for non-empty cells.
+void CPUSimulator::thermal_init_band(int p_min_x, int p_max_x, int p_min_y, int p_max_y) {
     for (int y = p_min_y; y <= p_max_y; y++) {
         for (int x = p_min_x; x <= p_max_x; x++) {
             Cell &next = grid.cell_next(x, y);
@@ -202,9 +233,14 @@ void CPUSimulator::apply_thermal_and_phase_changes(int p_min_x, int p_max_x, int
             }
         }
     }
+}
+
+void CPUSimulator::thermal_compute_band(int p_min_x, int p_max_x, int p_min_y, int p_max_y) {
+    int band_w = p_max_x - p_min_x + 1;
+    int band_h = p_max_y - p_min_y + 1;
+    std::vector<int16_t> new_temperatures(static_cast<size_t>(band_w * band_h));
 
     // Heat diffusion using 4-neighbor average.
-    std::vector<int16_t> new_temperatures((p_max_x - p_min_x + 1) * (p_max_y - p_min_y + 1));
     for (int y = p_min_y; y <= p_max_y; y++) {
         for (int x = p_min_x; x <= p_max_x; x++) {
             Cell &next = grid.cell_next(x, y);
@@ -233,7 +269,7 @@ void CPUSimulator::apply_thermal_and_phase_changes(int p_min_x, int p_max_x, int
             int32_t avg = sum / count;
             int32_t diff = avg - next.temperature;
             int32_t change = (diff * conductivity) / 100;
-            int idx = (y - p_min_y) * (p_max_x - p_min_x + 1) + (x - p_min_x);
+            int idx = (y - p_min_y) * band_w + (x - p_min_x);
             new_temperatures[idx] = static_cast<int16_t>(std::clamp(next.temperature + change, static_cast<int32_t>(-32768), static_cast<int32_t>(32767)));
         }
     }
@@ -245,7 +281,7 @@ void CPUSimulator::apply_thermal_and_phase_changes(int p_min_x, int p_max_x, int
             if (next.material_id == 0) {
                 continue;
             }
-            int idx = (y - p_min_y) * (p_max_x - p_min_x + 1) + (x - p_min_x);
+            int idx = (y - p_min_y) * band_w + (x - p_min_x);
             next.temperature = new_temperatures[idx];
 
             const Material *mat = registry.get_material(next.material_id);
@@ -429,8 +465,35 @@ void CPUSimulator::update() {
         }
     }
 
-    // Heat diffusion and phase change over the next buffer.
-    apply_thermal_and_phase_changes(min_x, max_x, min_y, max_y);
+    // Heat diffusion and phase change over the next buffer, split into bands
+    // and processed in parallel. Initialization must finish before any band
+    // reads neighbor temperatures.
+    int thermal_bands = std::min(thread_count, std::max(1, max_y - min_y + 1));
+    std::vector<std::thread> thermal_threads;
+    thermal_threads.reserve(static_cast<size_t>(thermal_bands));
+
+    for (int b = 0; b < thermal_bands; b++) {
+        int y0 = min_y + b * (max_y - min_y + 1) / thermal_bands;
+        int y1 = min_y + (b + 1) * (max_y - min_y + 1) / thermal_bands - 1;
+        thermal_threads.emplace_back([&, y0, y1]() {
+            thermal_init_band(min_x, max_x, y0, y1);
+        });
+    }
+    for (auto &t : thermal_threads) {
+        t.join();
+    }
+
+    thermal_threads.clear();
+    for (int b = 0; b < thermal_bands; b++) {
+        int y0 = min_y + b * (max_y - min_y + 1) / thermal_bands;
+        int y1 = min_y + (b + 1) * (max_y - min_y + 1) / thermal_bands - 1;
+        thermal_threads.emplace_back([&, y0, y1]() {
+            thermal_compute_band(min_x, max_x, y0, y1);
+        });
+    }
+    for (auto &t : thermal_threads) {
+        t.join();
+    }
 
     grid.swap_buffers();
 

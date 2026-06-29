@@ -8,6 +8,8 @@
 #include <godot_cpp/classes/image.hpp>
 #include <memory>
 #include <random>
+#include <thread>
+#include <vector>
 
 namespace ca {
 
@@ -27,16 +29,27 @@ private:
     int active_min_y = 0;
     int active_max_y = 0;
 
+    int thread_count = 4;
+
+    struct Region {
+        bool valid = false;
+        int min_x = 0, max_x = 0, min_y = 0, max_y = 0;
+    };
+
     bool can_move_to(int p_x, int p_y, uint16_t p_current_mat) const;
     void move_particle(int p_x, int p_y, int p_tx, int p_ty);
 
     uint16_t resolve_material_name(const std::string &p_name) const;
     bool is_hot_neighbor(int p_x, int p_y) const;
     void apply_reactions(int p_x, int p_y);
-    void apply_thermal_and_phase_changes(int p_min_x, int p_max_x, int p_min_y, int p_max_y);
+
+    void thermal_init_band(int p_min_x, int p_max_x, int p_min_y, int p_max_y);
+    void thermal_compute_band(int p_min_x, int p_max_x, int p_min_y, int p_max_y);
 
     void reset_active_region();
     void expand_active_region(int p_x, int p_y);
+    static void include_region(Region &r, int p_x, int p_y);
+    static void merge_region(Region &r_dst, const Region &r_src);
 
 public:
     CPUSimulator();
