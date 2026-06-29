@@ -31,6 +31,8 @@ private:
 
 	ca::ISimulator *simulator = nullptr;
 	Ref<ImageTexture> texture;
+	mutable Ref<Image> cached_image;
+	mutable bool image_dirty = true;
 
 protected:
 	static void _bind_methods();

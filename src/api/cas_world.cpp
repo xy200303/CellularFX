@@ -103,7 +103,7 @@ void CASWorld::init(int p_width, int p_height) {
 		}
 	}
 
-	texture = ImageTexture::create_from_image(simulator->get_image());
+	image_dirty = true;
 	initialized = true;
 	UtilityFunctions::print("CASWorld initialized: ", width, "x", height, " backend: ", get_backend_name());
 }
@@ -113,6 +113,7 @@ void CASWorld::clear() {
 		return;
 	}
 	simulator->clear();
+	image_dirty = true;
 }
 
 void CASWorld::update() {
@@ -120,10 +121,7 @@ void CASWorld::update() {
 		return;
 	}
 	simulator->update();
-	Ref<Image> img = simulator->get_image();
-	if (texture.is_valid()) {
-		texture->update(img);
-	}
+	image_dirty = true;
 }
 
 String CASWorld::get_backend_name() const {
@@ -197,6 +195,7 @@ void CASWorld::set_cell(int p_x, int p_y, const String &p_material_name) {
 	}
 	uint16_t id = reg->get_material_id(std::string(p_material_name.utf8().get_data()));
 	simulator->set_cell(p_x, p_y, id);
+	image_dirty = true;
 }
 
 String CASWorld::get_cell(int p_x, int p_y) const {
@@ -216,14 +215,18 @@ Ref<Image> CASWorld::get_image() const {
 	if (simulator == nullptr) {
 		return Ref<Image>();
 	}
-	return simulator->get_image();
+	if (image_dirty) {
+		cached_image = simulator->get_image();
+		image_dirty = false;
+	}
+	return cached_image;
 }
 
 Ref<Texture2D> CASWorld::get_texture() {
 	if (simulator == nullptr) {
 		return Ref<Texture2D>();
 	}
-	godot::Ref<godot::Image> img = simulator->get_image();
+	godot::Ref<godot::Image> img = get_image();
 	if (img.is_null()) {
 		return Ref<Texture2D>();
 	}
@@ -270,9 +273,7 @@ Error CASWorld::load_world(const String &p_path) {
 	if (!ok) {
 		return ERR_INVALID_DATA;
 	}
-	// Force texture refresh on next access.
-	if (texture.is_valid()) {
-		texture->update(simulator->get_image());
-	}
+	// Force image refresh on next access.
+	image_dirty = true;
 	return OK;
 }
