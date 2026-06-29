@@ -526,34 +526,44 @@ godot::Ref<godot::Image> CPUSimulator::get_image() {
     int w = image->get_width();
     int h = image->get_height();
 
-    for (int y = 0; y < h; y++) {
-        for (int x = 0; x < w; x++) {
-            uint16_t mat_id = grid.cell_current(x, y).material_id;
-            if (mat_id == 0) {
-                continue;
-            }
-            if (mat_id < materials.size()) {
-                const Material &mat = materials[mat_id];
-                godot::Color c = mat.color;
-                int temp_diff = static_cast<int>(grid.cell_current(x, y).temperature) - mat.temperature;
-                if (temp_diff > 10) {
-                    float t = static_cast<float>(temp_diff) / 300.0f;
-                    t = std::min(t, 1.0f);
-                    c = c.lerp(mat.glow_color.a > 0.0f ? mat.glow_color : godot::Color(1.0f, 0.3f, 0.1f), t);
-                } else if (temp_diff < -10) {
-                    float t = static_cast<float>(-temp_diff) / 100.0f;
-                    t = std::min(t, 0.6f);
-                    c = c.lerp(godot::Color(0.7f, 0.9f, 1.0f), t);
+    // Render scanlines in parallel; each thread writes disjoint rows of the
+    // output image, so there is no contention.
+    int bands = std::min(thread_count, std::max(1, h));
+    for (int b = 0; b < bands; b++) {
+        int y0 = b * h / bands;
+        int y1 = (b + 1) * h / bands;
+        thread_pool->enqueue([&, y0, y1]() {
+            for (int y = y0; y < y1; y++) {
+                for (int x = 0; x < w; x++) {
+                    uint16_t mat_id = grid.cell_current(x, y).material_id;
+                    if (mat_id == 0) {
+                        continue;
+                    }
+                    if (mat_id < materials.size()) {
+                        const Material &mat = materials[mat_id];
+                        godot::Color c = mat.color;
+                        int temp_diff = static_cast<int>(grid.cell_current(x, y).temperature) - mat.temperature;
+                        if (temp_diff > 10) {
+                            float t = static_cast<float>(temp_diff) / 300.0f;
+                            t = std::min(t, 1.0f);
+                            c = c.lerp(mat.glow_color.a > 0.0f ? mat.glow_color : godot::Color(1.0f, 0.3f, 0.1f), t);
+                        } else if (temp_diff < -10) {
+                            float t = static_cast<float>(-temp_diff) / 100.0f;
+                            t = std::min(t, 0.6f);
+                            c = c.lerp(godot::Color(0.7f, 0.9f, 1.0f), t);
+                        }
+                        if (mat.emit_light) {
+                            // Emissive materials already use their glow color; still blend slightly.
+                            image->set_pixel(x, y, mat.glow_color.lerp(c, 0.3f));
+                        } else {
+                            image->set_pixel(x, y, c);
+                        }
+                    }
                 }
-                if (mat.emit_light) {
-                    // Emissive materials already use their glow color; still blend slightly.
-                    image->set_pixel(x, y, mat.glow_color.lerp(c, 0.3f));
-                } else {
-                    image->set_pixel(x, y, c);
-                }
             }
-        }
+        });
     }
+    thread_pool->wait_all();
 
     return image;
 }
