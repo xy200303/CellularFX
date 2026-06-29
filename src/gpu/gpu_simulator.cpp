@@ -258,17 +258,10 @@ void GPUSimulator::update() {
         sync_gpu_from_cpu();
     }
 
-    // Clear per-frame auxiliary buffers.
+    // Clear per-frame auxiliary buffers on the GPU.
     uint32_t claim_size = static_cast<uint32_t>(total_cells * sizeof(uint32_t));
-    {
-        static thread_local godot::PackedByteArray zero_claim;
-        if (zero_claim.size() != static_cast<int32_t>(claim_size)) {
-            zero_claim.resize(static_cast<int32_t>(claim_size));
-            memset(zero_claim.ptrw(), 0, claim_size);
-        }
-        rd->buffer_update(claim_buf, 0, claim_size, zero_claim);
-        rd->buffer_update(moved_to_buf, 0, claim_size, zero_claim);
-    }
+    rd->buffer_clear(claim_buf, 0, claim_size);
+    rd->buffer_clear(moved_to_buf, 0, claim_size);
 
     const int PASSES = 4;
     godot::RID set = current_is_a ? uniform_set_a_to_b : uniform_set_b_to_a;
