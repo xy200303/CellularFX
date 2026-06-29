@@ -17,7 +17,7 @@ class GPUSimulator : public ISimulator {
 public:
     static constexpr uint32_t MAX_MATERIALS = 256;
     static constexpr uint32_t MATERIAL_FLOATS = 4;
-    static constexpr uint32_t MATERIAL_UVEC4 = 2;
+    static constexpr uint32_t MATERIAL_UVEC4 = 3;
 
     GPUSimulator() = default;
     ~GPUSimulator() override;

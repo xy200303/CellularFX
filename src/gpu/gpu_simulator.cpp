@@ -107,6 +107,18 @@ void GPUSimulator::update_materials_buffer() {
         material_data[base + 6] = m->emit_light ? 1u : 0u;
         material_data[base + 7] = (static_cast<uint32_t>(m->velocity_x) & 0xFFFFu)
                                   | ((static_cast<uint32_t>(m->velocity_y) & 0xFFFFu) << 16u);
+
+        // Third uvec4: phase-change parameters.
+        uint16_t solid_id = registry.get_material_id(m->solid_form);
+        uint16_t liquid_id = registry.get_material_id(m->liquid_form);
+        uint16_t gas_id = registry.get_material_id(m->gas_form);
+        material_data[base + 8] = (static_cast<uint32_t>(static_cast<int16_t>(m->melting_point)) & 0xFFFFu)
+                                  | ((static_cast<uint32_t>(static_cast<int16_t>(m->boiling_point)) & 0xFFFFu) << 16u);
+        material_data[base + 9] = (static_cast<uint32_t>(static_cast<int16_t>(m->freeze_point)) & 0xFFFFu)
+                                  | ((static_cast<uint32_t>(std::clamp(m->thermal_conductivity, 0, 65535)) & 0xFFFFu) << 16u);
+        material_data[base + 10] = (static_cast<uint32_t>(solid_id) & 0xFFFFu)
+                                   | ((static_cast<uint32_t>(liquid_id) & 0xFFFFu) << 16u);
+        material_data[base + 11] = (static_cast<uint32_t>(gas_id) & 0xFFFFu);
     }
 
     // Pack data into the pre-allocated buffer region.
@@ -148,7 +160,7 @@ void GPUSimulator::init(int p_width, int p_height) {
         return;
     }
 
-    uint32_t size_bytes = static_cast<uint32_t>(total_cells * sizeof(uint32_t));
+    uint32_t size_bytes = static_cast<uint32_t>(total_cells * sizeof(uint32_t) * 2);
     godot::PackedByteArray empty_data;
     empty_data.resize(static_cast<int32_t>(size_bytes));
     memset(empty_data.ptrw(), 0, size_bytes);
@@ -156,7 +168,7 @@ void GPUSimulator::init(int p_width, int p_height) {
     buf_a = rd->storage_buffer_create(size_bytes, empty_data);
     buf_b = rd->storage_buffer_create(size_bytes, empty_data);
 
-    cpu_grid.resize(total_cells, 0);
+    cpu_grid.resize(static_cast<size_t>(total_cells) * 2, 0);
     gpu_grid_dirty = false;
     cpu_grid_dirty = false;
     current_is_a = true;
@@ -207,8 +219,8 @@ void GPUSimulator::sync_gpu_from_cpu() {
         return;
     }
     godot::PackedByteArray data;
-    data.resize(total_cells * 4);
-    memcpy(data.ptrw(), cpu_grid.data(), total_cells * 4);
+    data.resize(total_cells * 8);
+    memcpy(data.ptrw(), cpu_grid.data(), total_cells * 8);
     godot::RID current_buf = current_is_a ? buf_a : buf_b;
     rd->buffer_update(current_buf, 0, static_cast<uint32_t>(data.size()), data);
     gpu_grid_dirty = false;
@@ -219,9 +231,9 @@ void GPUSimulator::sync_cpu_from_gpu() {
         return;
     }
     godot::RID current_buf = current_is_a ? buf_a : buf_b;
-    godot::PackedByteArray data = rd->buffer_get_data(current_buf, 0, total_cells * 4);
-    if (data.size() >= total_cells * 4) {
-        memcpy(cpu_grid.data(), data.ptr(), total_cells * 4);
+    godot::PackedByteArray data = rd->buffer_get_data(current_buf, 0, total_cells * 8);
+    if (data.size() >= total_cells * 8) {
+        memcpy(cpu_grid.data(), data.ptr(), total_cells * 8);
     }
     cpu_grid_dirty = false;
 }
@@ -235,7 +247,7 @@ void GPUSimulator::update() {
         sync_gpu_from_cpu();
     }
 
-    const int PASSES = 3;
+    const int PASSES = 4;
     for (int pass = 0; pass < PASSES; pass++) {
         godot::RID set = (current_is_a == (pass % 2 == 0)) ? uniform_set_a_to_b : uniform_set_b_to_a;
 
@@ -265,7 +277,12 @@ void GPUSimulator::set_cell(int p_x, int p_y, uint16_t p_material_id) {
     if (p_x < 0 || p_x >= width || p_y < 0 || p_y >= height) {
         return;
     }
-    cpu_grid[cell_index(p_x, p_y)] = p_material_id;
+    size_t base = static_cast<size_t>(cell_index(p_x, p_y)) * 2;
+    const Material *mat = registry.get_material(p_material_id);
+    int16_t temp = mat ? static_cast<int16_t>(mat->temperature) : static_cast<int16_t>(0);
+    uint16_t temp_u = static_cast<uint16_t>(temp);
+    cpu_grid[base + 0] = static_cast<uint32_t>(p_material_id) | (static_cast<uint32_t>(temp_u) << 16u);
+    cpu_grid[base + 1] = 0u;
     gpu_grid_dirty = true;
 }
 
@@ -276,7 +293,7 @@ uint16_t GPUSimulator::get_cell(int p_x, int p_y) const {
     if (cpu_grid_dirty) {
         const_cast<GPUSimulator *>(this)->sync_cpu_from_gpu();
     }
-    return static_cast<uint16_t>(cpu_grid[cell_index(p_x, p_y)]);
+    return static_cast<uint16_t>(cpu_grid[static_cast<size_t>(cell_index(p_x, p_y)) * 2]);
 }
 
 godot::Ref<godot::Image> GPUSimulator::get_image() {
@@ -290,7 +307,7 @@ godot::Ref<godot::Image> GPUSimulator::get_image() {
     const std::vector<Material> &materials = registry.get_all();
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
-            uint16_t mat_id = static_cast<uint16_t>(cpu_grid[cell_index(x, y)]);
+            uint16_t mat_id = static_cast<uint16_t>(cpu_grid[static_cast<size_t>(cell_index(x, y)) * 2]);
             if (mat_id != 0 && mat_id < materials.size()) {
                 const Material &mat = materials[mat_id];
                 if (mat.emit_light) {
@@ -309,8 +326,8 @@ int GPUSimulator::get_particle_count() const {
         const_cast<GPUSimulator *>(this)->sync_cpu_from_gpu();
     }
     int count = 0;
-    for (uint32_t id : cpu_grid) {
-        if (id != 0) {
+    for (size_t i = 0; i < cpu_grid.size(); i += 2) {
+        if ((cpu_grid[i] & 0xFFFFu) != 0) {
             count++;
         }
     }
@@ -319,7 +336,16 @@ int GPUSimulator::get_particle_count() const {
 
 void GPUSimulator::clear() {
     std::fill(cpu_grid.begin(), cpu_grid.end(), 0u);
-    gpu_grid_dirty = true;
+    if (rd != nullptr) {
+        uint32_t size_bytes = static_cast<uint32_t>(total_cells * sizeof(uint32_t) * 2);
+        godot::PackedByteArray empty_data;
+        empty_data.resize(static_cast<int32_t>(size_bytes));
+        memset(empty_data.ptrw(), 0, size_bytes);
+        rd->buffer_update(buf_a, 0, size_bytes, empty_data);
+        rd->buffer_update(buf_b, 0, size_bytes, empty_data);
+    }
+    gpu_grid_dirty = false;
+    cpu_grid_dirty = false;
 }
 
 void GPUSimulator::shutdown() {
@@ -405,11 +431,14 @@ godot::PackedByteArray GPUSimulator::serialize() const {
 
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
-            uint16_t mat_id = static_cast<uint16_t>(cpu_grid[cell_index(x, y)]);
-            const Material *mat = registry.get_material(mat_id);
+            size_t base = static_cast<size_t>(cell_index(x, y)) * 2;
+            uint16_t mat_id = static_cast<uint16_t>(cpu_grid[base] & 0xFFFFu);
+            uint16_t temp_u = static_cast<uint16_t>(cpu_grid[base] >> 16);
+            int16_t temp = static_cast<int16_t>(temp_u);
+            uint8_t flags = static_cast<uint8_t>(cpu_grid[base + 1] & 0xFFu);
             write_u16(mat_id);
-            write_i16(mat ? static_cast<int16_t>(mat->temperature) : static_cast<int16_t>(0));
-            write_u8(0);
+            write_i16(temp);
+            write_u8(flags);
         }
     }
 
@@ -483,10 +512,12 @@ bool GPUSimulator::deserialize(const godot::PackedByteArray &p_data) {
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
             uint16_t saved_id = read_u16();
-            read_i16(); // temperature not used on GPU
-            read_u8();  // flags not used on GPU
+            int16_t temp = read_i16();
+            uint8_t flags = read_u8();
             uint16_t current_id = saved_id < id_mapping.size() ? id_mapping[saved_id] : 0;
-            cpu_grid[cell_index(x, y)] = current_id;
+            size_t base = static_cast<size_t>(cell_index(x, y)) * 2;
+            cpu_grid[base + 0] = static_cast<uint32_t>(current_id) | (static_cast<uint32_t>(static_cast<uint16_t>(temp)) << 16u);
+            cpu_grid[base + 1] = static_cast<uint32_t>(flags);
         }
     }
 
