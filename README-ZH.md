@@ -101,6 +101,8 @@ func _process(_delta):
 | `clear()` | 清空世界。 |
 | `get_texture()` | 获取渲染用的 `Texture2D`。 |
 | `get_particle_count()` | 获取非空单元格数量。 |
+| `save_world(path)` | 将世界保存为二进制文件。 |
+| `load_world(path)` | 从二进制文件加载世界。 |
 
 ### CASMaterial
 

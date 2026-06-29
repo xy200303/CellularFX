@@ -4,6 +4,7 @@
 #include <godot_cpp/classes/image.hpp>
 #include <godot_cpp/classes/texture2d.hpp>
 #include <godot_cpp/variant/string.hpp>
+#include <godot_cpp/variant/packed_byte_array.hpp>
 
 namespace ca {
 
@@ -19,6 +20,9 @@ public:
     virtual int get_particle_count() const = 0;
     virtual void clear() = 0;
     virtual void shutdown() = 0;
+
+    virtual godot::PackedByteArray serialize() const = 0;
+    virtual bool deserialize(const godot::PackedByteArray &p_data) = 0;
 };
 
 } // namespace ca

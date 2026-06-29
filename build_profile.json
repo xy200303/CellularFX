@@ -33,6 +33,7 @@
         "RID",
         "ResourceLoader",
         "ResourceFormatLoader",
+        "FileAccess",
         "MainLoop",
         "Window",
         "Viewport"

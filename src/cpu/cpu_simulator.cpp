@@ -4,6 +4,7 @@
 #include <chrono>
 #include <algorithm>
 #include <random>
+#include <cstring>
 
 namespace ca {
 
@@ -509,6 +510,159 @@ void CPUSimulator::clear() {
 void CPUSimulator::shutdown() {
     image.unref();
     reset_active_region();
+}
+
+godot::PackedByteArray CPUSimulator::serialize() const {
+    godot::PackedByteArray data;
+    const std::vector<Material> &materials = registry.get_all();
+
+    // Header: magic, version, width, height, material count.
+    size_t header_size = 4 + 4 + 4 + 4 + 4;
+    size_t material_table_size = 0;
+    for (const Material &m : materials) {
+        material_table_size += 2 + m.name.size();
+    }
+    size_t cell_size = 2 + 2 + 1; // material_id + temperature + flags
+    size_t total_size = header_size + material_table_size + static_cast<size_t>(width * height) * cell_size;
+
+    data.resize(static_cast<int32_t>(total_size));
+    uint8_t *ptr = data.ptrw();
+    size_t offset = 0;
+
+    auto write_u32 = [&](uint32_t v) {
+        *reinterpret_cast<uint32_t *>(ptr + offset) = v;
+        offset += 4;
+    };
+    auto write_i32 = [&](int32_t v) {
+        *reinterpret_cast<int32_t *>(ptr + offset) = v;
+        offset += 4;
+    };
+    auto write_u16 = [&](uint16_t v) {
+        *reinterpret_cast<uint16_t *>(ptr + offset) = v;
+        offset += 2;
+    };
+    auto write_i16 = [&](int16_t v) {
+        *reinterpret_cast<int16_t *>(ptr + offset) = v;
+        offset += 2;
+    };
+    auto write_u8 = [&](uint8_t v) {
+        ptr[offset] = v;
+        offset += 1;
+    };
+
+    memcpy(ptr + offset, "CAFX", 4);
+    offset += 4;
+    write_u32(1); // version
+    write_i32(width);
+    write_i32(height);
+    write_u32(static_cast<uint32_t>(materials.size()));
+
+    for (const Material &m : materials) {
+        write_u16(static_cast<uint16_t>(m.name.size()));
+        memcpy(ptr + offset, m.name.data(), m.name.size());
+        offset += m.name.size();
+    }
+
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            const Cell &cell = grid.cell_current(x, y);
+            write_u16(cell.material_id);
+            write_i16(cell.temperature);
+            write_u8(cell.flags);
+        }
+    }
+
+    return data;
+}
+
+bool CPUSimulator::deserialize(const godot::PackedByteArray &p_data) {
+    if (p_data.size() < 20) {
+        return false;
+    }
+    const uint8_t *ptr = p_data.ptr();
+    size_t offset = 0;
+
+    auto read_u32 = [&]() -> uint32_t {
+        uint32_t v = *reinterpret_cast<const uint32_t *>(ptr + offset);
+        offset += 4;
+        return v;
+    };
+    auto read_i32 = [&]() -> int32_t {
+        int32_t v = *reinterpret_cast<const int32_t *>(ptr + offset);
+        offset += 4;
+        return v;
+    };
+    auto read_u16 = [&]() -> uint16_t {
+        uint16_t v = *reinterpret_cast<const uint16_t *>(ptr + offset);
+        offset += 2;
+        return v;
+    };
+    auto read_i16 = [&]() -> int16_t {
+        int16_t v = *reinterpret_cast<const int16_t *>(ptr + offset);
+        offset += 2;
+        return v;
+    };
+    auto read_u8 = [&]() -> uint8_t {
+        uint8_t v = ptr[offset];
+        offset += 1;
+        return v;
+    };
+
+    if (memcmp(ptr + offset, "CAFX", 4) != 0) {
+        return false;
+    }
+    offset += 4;
+    uint32_t version = read_u32();
+    if (version != 1) {
+        return false;
+    }
+    int32_t saved_width = read_i32();
+    int32_t saved_height = read_i32();
+    if (saved_width != width || saved_height != height) {
+        return false;
+    }
+    uint32_t material_count = read_u32();
+
+    std::vector<uint16_t> id_mapping(material_count, 0);
+    for (uint32_t i = 0; i < material_count; i++) {
+        uint16_t name_len = read_u16();
+        if (offset + name_len > static_cast<size_t>(p_data.size())) {
+            return false;
+        }
+        std::string name(reinterpret_cast<const char *>(ptr + offset), name_len);
+        offset += name_len;
+        id_mapping[i] = registry.get_material_id(name);
+    }
+
+    size_t expected_cell_size = static_cast<size_t>(width * height) * 5;
+    if (offset + expected_cell_size > static_cast<size_t>(p_data.size())) {
+        return false;
+    }
+
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            uint16_t saved_id = read_u16();
+            int16_t temp = read_i16();
+            uint8_t flags = read_u8();
+            uint16_t current_id = saved_id < id_mapping.size() ? id_mapping[saved_id] : 0;
+            Cell &cell = grid.cell_current(x, y);
+            cell.material_id = current_id;
+            cell.temperature = temp;
+            cell.flags = flags;
+        }
+    }
+
+    // Recompute active region.
+    reset_active_region();
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            if (grid.cell_current(x, y).material_id != 0) {
+                expand_active_region(x, y);
+            }
+        }
+    }
+
+    return true;
 }
 
 } // namespace ca

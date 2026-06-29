@@ -3,6 +3,7 @@
 
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
+#include <godot_cpp/classes/file_access.hpp>
 
 using namespace godot;
 
@@ -39,6 +40,9 @@ void CASWorld::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_image"), &CASWorld::get_image);
 	ClassDB::bind_method(D_METHOD("get_texture"), &CASWorld::get_texture);
 	ClassDB::bind_method(D_METHOD("get_particle_count"), &CASWorld::get_particle_count);
+
+	ClassDB::bind_method(D_METHOD("save_world", "path"), &CASWorld::save_world);
+	ClassDB::bind_method(D_METHOD("load_world", "path"), &CASWorld::load_world);
 
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "backend", PROPERTY_HINT_ENUM, "CPU,GPU"), "set_backend", "get_backend");
 
@@ -227,4 +231,39 @@ int CASWorld::get_particle_count() const {
 		return 0;
 	}
 	return simulator->get_particle_count();
+}
+
+Error CASWorld::save_world(const String &p_path) const {
+	if (simulator == nullptr) {
+		return ERR_UNCONFIGURED;
+	}
+	PackedByteArray data = simulator->serialize();
+	Ref<FileAccess> f = FileAccess::open(p_path, FileAccess::ModeFlags::WRITE);
+	if (f.is_null()) {
+		return ERR_CANT_OPEN;
+	}
+	f->store_buffer(data);
+	f->close();
+	return OK;
+}
+
+Error CASWorld::load_world(const String &p_path) {
+	if (simulator == nullptr) {
+		return ERR_UNCONFIGURED;
+	}
+	Ref<FileAccess> f = FileAccess::open(p_path, FileAccess::ModeFlags::READ);
+	if (f.is_null()) {
+		return ERR_CANT_OPEN;
+	}
+	PackedByteArray data = f->get_buffer(f->get_length());
+	f->close();
+	bool ok = simulator->deserialize(data);
+	if (!ok) {
+		return ERR_INVALID_DATA;
+	}
+	// Force texture refresh on next access.
+	if (texture.is_valid()) {
+		texture->update(simulator->get_image());
+	}
+	return OK;
 }

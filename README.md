@@ -101,6 +101,8 @@ func _process(_delta):
 | `clear()` | Clear the world. |
 | `get_texture()` | Get the rendered `Texture2D`. |
 | `get_particle_count()` | Get number of non-empty cells. |
+| `save_world(path)` | Save the world to a binary file. |
+| `load_world(path)` | Load the world from a binary file. |
 
 ### CASMaterial
 

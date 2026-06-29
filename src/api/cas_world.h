@@ -57,6 +57,9 @@ public:
 	Ref<Image> get_image() const;
 	Ref<Texture2D> get_texture();
 	int get_particle_count() const;
+
+	Error save_world(const String &p_path) const;
+	Error load_world(const String &p_path);
 };
 
 } // namespace godot

@@ -51,6 +51,9 @@ public:
     void clear() override;
     void shutdown() override;
 
+    godot::PackedByteArray serialize() const override;
+    bool deserialize(const godot::PackedByteArray &p_data) override;
+
     MaterialRegistry &get_registry() { return registry; }
     const MaterialRegistry &get_registry() const { return registry; }
 };
