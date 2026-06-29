@@ -24,7 +24,35 @@ A high-performance **cellular automata / falling-sand engine** for Godot 4, writ
 - **Editor-friendly**: works directly inside the Godot editor; materials can be configured in the Inspector.
 - **Editor Dock**: brush tools, material palette, real-time preview, Play/Step/Clear controls.
 - **Temperature visualization**: cell colors blend towards hot/cold tints based on per-cell temperature.
-- **Benchmark**: `demo/benchmark.gd` measures CPU performance across grid sizes.
+- **Benchmark**: `demo/benchmark.gd` measures CPU performance across grid sizes; `demo/benchmark_gpu.gd` compares CPU and GPU in a window.
+
+## Performance
+
+Measured on an AMD Ryzen laptop with integrated Radeon graphics, Windows 11, Godot 4.6.2, MSVC release build. Results are illustrative and will vary by hardware.
+
+### CPU backend (headless)
+
+Run with `godot --headless --script demo/benchmark.gd`.
+
+| Size | Particles | ms/frame | FPS |
+|------|-----------|----------|-----|
+| 64×64 | ~2 300 | 0.13 | ~7 400 |
+| 128×128 | ~9 400 | 0.29 | ~3 300 |
+| 256×256 | ~37 700 | 0.99 | ~1 000 |
+| 512×512 | ~151 000 | 3.64 | ~275 |
+
+### GPU vs CPU (windowed)
+
+Run with `godot --script demo/benchmark_gpu.gd`.
+
+| Size | Backend | Particles | ms/frame | FPS |
+|------|---------|-----------|----------|-----|
+| 64×64 | CPU | 4 096 | 0.20 | ~5 000 |
+| 64×64 | GPU | 4 096 | 0.41 | ~2 400 |
+| 128×128 | CPU | 16 384 | 0.57 | ~1 800 |
+| 128×128 | GPU | 16 384 | 0.83 | ~1 200 |
+| 256×256 | CPU | 65 536 | 1.81 | ~550 |
+| 256×256 | GPU | 65 536 | 1.69 | ~590 |
 
 ## Supported Platforms
 
