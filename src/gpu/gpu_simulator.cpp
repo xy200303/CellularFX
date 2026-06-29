@@ -329,13 +329,27 @@ godot::Ref<godot::Image> GPUSimulator::get_image() {
     const std::vector<Material> &materials = registry.get_all();
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
-            uint16_t mat_id = static_cast<uint16_t>(cpu_grid[static_cast<size_t>(cell_index(x, y)) * 2]);
+            size_t base = static_cast<size_t>(cell_index(x, y)) * 2;
+            uint16_t mat_id = static_cast<uint16_t>(cpu_grid[base] & 0xFFFFu);
             if (mat_id != 0 && mat_id < materials.size()) {
                 const Material &mat = materials[mat_id];
+                uint16_t temp_u = static_cast<uint16_t>(cpu_grid[base] >> 16);
+                int16_t temp = static_cast<int16_t>(temp_u);
+                godot::Color c = mat.color;
+                int temp_diff = static_cast<int>(temp) - mat.temperature;
+                if (temp_diff > 10) {
+                    float t = static_cast<float>(temp_diff) / 300.0f;
+                    t = std::min(t, 1.0f);
+                    c = c.lerp(mat.glow_color.a > 0.0f ? mat.glow_color : godot::Color(1.0f, 0.3f, 0.1f), t);
+                } else if (temp_diff < -10) {
+                    float t = static_cast<float>(-temp_diff) / 100.0f;
+                    t = std::min(t, 0.6f);
+                    c = c.lerp(godot::Color(0.7f, 0.9f, 1.0f), t);
+                }
                 if (mat.emit_light) {
-                    img->set_pixel(x, y, mat.glow_color);
+                    img->set_pixel(x, y, mat.glow_color.lerp(c, 0.3f));
                 } else {
-                    img->set_pixel(x, y, mat.color);
+                    img->set_pixel(x, y, c);
                 }
             }
         }
