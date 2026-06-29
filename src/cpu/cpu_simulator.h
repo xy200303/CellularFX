@@ -4,6 +4,7 @@
 #include "core/isimulator.h"
 #include "core/world_grid.h"
 #include "core/material_registry.h"
+#include "thread_pool.h"
 
 #include <godot_cpp/classes/image.hpp>
 #include <memory>
@@ -30,6 +31,7 @@ private:
     int active_max_y = 0;
 
     int thread_count = 4;
+    std::unique_ptr<ThreadPool> thread_pool;
 
     struct Region {
         bool valid = false;

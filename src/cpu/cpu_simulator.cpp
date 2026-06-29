@@ -29,6 +29,7 @@ void CPUSimulator::init(int p_width, int p_height) {
     image = godot::Image::create(width, height, false, godot::Image::FORMAT_RGBA8);
     image->fill(godot::Color(0, 0, 0, 0));
     reset_active_region();
+    thread_pool = std::make_unique<ThreadPool>(static_cast<size_t>(thread_count));
 }
 
 void CPUSimulator::reset_active_region() {
@@ -469,31 +470,23 @@ void CPUSimulator::update() {
     // and processed in parallel. Initialization must finish before any band
     // reads neighbor temperatures.
     int thermal_bands = std::min(thread_count, std::max(1, max_y - min_y + 1));
-    std::vector<std::thread> thermal_threads;
-    thermal_threads.reserve(static_cast<size_t>(thermal_bands));
-
     for (int b = 0; b < thermal_bands; b++) {
         int y0 = min_y + b * (max_y - min_y + 1) / thermal_bands;
         int y1 = min_y + (b + 1) * (max_y - min_y + 1) / thermal_bands - 1;
-        thermal_threads.emplace_back([&, y0, y1]() {
+        thread_pool->enqueue([&, y0, y1]() {
             thermal_init_band(min_x, max_x, y0, y1);
         });
     }
-    for (auto &t : thermal_threads) {
-        t.join();
-    }
+    thread_pool->wait_all();
 
-    thermal_threads.clear();
     for (int b = 0; b < thermal_bands; b++) {
         int y0 = min_y + b * (max_y - min_y + 1) / thermal_bands;
         int y1 = min_y + (b + 1) * (max_y - min_y + 1) / thermal_bands - 1;
-        thermal_threads.emplace_back([&, y0, y1]() {
+        thread_pool->enqueue([&, y0, y1]() {
             thermal_compute_band(min_x, max_x, y0, y1);
         });
     }
-    for (auto &t : thermal_threads) {
-        t.join();
-    }
+    thread_pool->wait_all();
 
     grid.swap_buffers();
 
@@ -584,6 +577,7 @@ void CPUSimulator::clear() {
 
 void CPUSimulator::shutdown() {
     image.unref();
+    thread_pool.reset();
     reset_active_region();
 }
 
