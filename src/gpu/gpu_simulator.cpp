@@ -272,6 +272,10 @@ void GPUSimulator::update() {
 
     const int PASSES = 4;
     godot::RID set = current_is_a ? uniform_set_a_to_b : uniform_set_b_to_a;
+
+    int64_t list = rd->compute_list_begin();
+    rd->compute_list_bind_compute_pipeline(list, pipeline);
+    rd->compute_list_bind_uniform_set(list, set, 0);
     for (int pass = 0; pass < PASSES; pass++) {
         godot::PackedByteArray push;
         push.resize(16);
@@ -281,15 +285,15 @@ void GPUSimulator::update() {
         p[2] = pass;
         p[3] = static_cast<int32_t>(frame_seed++);
 
-        int64_t list = rd->compute_list_begin();
-        rd->compute_list_bind_compute_pipeline(list, pipeline);
-        rd->compute_list_bind_uniform_set(list, set, 0);
         rd->compute_list_set_push_constant(list, push, static_cast<uint32_t>(push.size()));
         rd->compute_list_dispatch(list, (total_cells + 63) / 64, 1, 1);
-        rd->compute_list_end();
-        rd->submit();
-        rd->sync();
+        if (pass != PASSES - 1) {
+            rd->compute_list_add_barrier(list);
+        }
     }
+    rd->compute_list_end();
+    rd->submit();
+    rd->sync();
 
     current_is_a = !current_is_a;
     cpu_grid_dirty = true;
