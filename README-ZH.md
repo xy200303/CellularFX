@@ -13,8 +13,8 @@
 ## 特性
 
 - **双后端**：运行时可在 CPU 与 GPU 模拟之间切换。
-  - CPU 后端：单线程 + 活跃区域优化。
-  - GPU 后端：Vulkan Compute Shader 大规模并行更新。
+  - CPU 后端：活跃区域扫描 + 热传导/相变多线程并行。
+  - GPU 后端：Vulkan Compute Shader，push 模式移动 + atomic claim 竞争解决。
 - **材料系统**：以 Godot `Resource` 资源定义材料，支持物理与反应规则。
   - 内置材料类型：固体、粉末、液体、气体。
   - 行为：重力下落、斜向滑落、水平流动、基于密度的液体置换。
@@ -22,6 +22,9 @@
 - **大网格**：高效模拟 256×256 到 1024×1024 规模的世界。
 - **运行时 API**：通过 GDScript 初始化、更新、绘制、清空、切换后端。
 - **编辑器友好**：可直接在 Godot 编辑器中使用；材料可在 Inspector 中配置。
+- **编辑器 Dock**：笔刷工具、材料面板、实时预览、播放/步进/清空控制。
+- **温度可视化**：单元格颜色会随自身温度向热/冷色调插值。
+- **性能基准**：`demo/benchmark.gd` 可测量不同网格尺寸下的 CPU 性能。
 
 ## 支持平台
 
@@ -121,12 +124,22 @@ func _process(_delta):
 | `corrosion_chance` | `float` | 每帧腐蚀邻居的概率（0-1）。 |
 | `explosive` | `bool` | 与高温材料相邻时会爆炸。 |
 | `explode_to` | `String` | 爆炸后 3×3 区域替换为的材料名称。 |
+| `temperature` | `int` | 单元格默认温度。 |
+| `emit_light` | `bool` | 是否使用 `glow_color`。 |
+| `glow_color` | `Color` | 自发光/色调颜色。 |
+| `melting_point` | `int` | 超过此温度时变为 `liquid_form`。 |
+| `boiling_point` | `int` | 超过此温度时变为 `gas_form`。 |
+| `freeze_point` | `int` | 低于此温度时变为 `solid_form`。 |
+| `solid_form` | `String` | 凝固后转变的材料名称。 |
+| `liquid_form` | `String` | 熔化后转变的材料名称。 |
+| `gas_form` | `String` | 沸腾后转变的材料名称。 |
+| `thermal_conductivity` | `int` | 0–100，数值越高热传导越快。 |
 
 ## 后端说明
 
 - **GPU 后端**需要带 GPU 的窗口化 Godot 进程。在 `--headless` 模式下会自动回退到 CPU。
-- GPU 使用 Vulkan 计算着色器，分 3 个 pass：垂直下落、斜向滑落、水平流动。材料属性已同步到 GPU，为后续反应支持做准备。
-- CPU 使用活跃区域扫描，空区域自动跳过，并支持完整反应规则（燃烧、腐蚀、爆炸、寿命）。
+- GPU 使用 Vulkan 计算着色器，采用 push 模式移动：每个单元格提议目标位置，通过 atomic `CompSwap` 解决冲突，再经 resolve/clear pass 完成位置确定；最后的 pass 执行反应、寿命衰减、热传导与相变。
+- CPU 使用活跃区域扫描以跳过空区域；移动/反应保持单线程时序，热传导/相变按水平 band 多线程并行。
 
 ## 从源码构建
 
@@ -172,9 +185,9 @@ cellularfx/
 - [x] GPU 计算后端
 - [x] 更多材料与反应规则（火、烟、酸、油、木头、火药）
 - [x] 数据驱动的材料规则（寿命、燃烧、腐蚀、爆炸）
-- [ ] 多线程 CPU 后端
-- [ ] 编辑器插件（笔刷、材料面板、保存/加载）
-- [ ] 世界序列化
+- [x] 多线程 CPU 后端
+- [x] 编辑器插件（笔刷、材料面板、保存/加载）
+- [x] 世界序列化
 - [ ] Linux 与 macOS 支持
 - [ ] 视觉效果（发光、扭曲、粒子）
 

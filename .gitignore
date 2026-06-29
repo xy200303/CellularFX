@@ -13,3 +13,7 @@ android/
 # OS
 .DS_Store
 Thumbs.db
+
+# Distribution / temp packaging
+dist/
+tmp_source/

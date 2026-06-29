@@ -13,8 +13,8 @@ A high-performance **cellular automata / falling-sand engine** for Godot 4, writ
 ## Features
 
 - **Dual backends**: switch between CPU and GPU simulation at runtime.
-  - CPU backend: single-threaded with active-region optimization.
-  - GPU backend: Vulkan compute shader for massively parallel updates.
+  - CPU backend: active-region scan with multi-threaded heat/phase-change passes.
+  - GPU backend: Vulkan compute shader with push-mode movement and atomic claim resolution.
 - **Material system**: define materials as Godot `Resource` assets with physics and reaction rules.
   - Built-in material types: Solid, Powder, Liquid, Gas.
   - Behaviours: gravity, diagonal sliding, horizontal flow, density-based displacement.
@@ -22,6 +22,9 @@ A high-performance **cellular automata / falling-sand engine** for Godot 4, writ
 - **Large grids**: efficiently simulate 256×256 to 1024×1024 worlds.
 - **Runtime API**: initialize, update, draw, clear, and switch backends from GDScript.
 - **Editor-friendly**: works directly inside the Godot editor; materials can be configured in the Inspector.
+- **Editor Dock**: brush tools, material palette, real-time preview, Play/Step/Clear controls.
+- **Temperature visualization**: cell colors blend towards hot/cold tints based on per-cell temperature.
+- **Benchmark**: `demo/benchmark.gd` measures CPU performance across grid sizes.
 
 ## Supported Platforms
 
@@ -121,12 +124,22 @@ func _process(_delta):
 | `corrosion_chance` | `float` | Probability (0-1) to corrode a neighbour each frame. |
 | `explosive` | `bool` | Detonates when adjacent to a hot material. |
 | `explode_to` | `String` | Material to replace the 3×3 explosion area. |
+| `temperature` | `int` | Default cell temperature. |
+| `emit_light` | `bool` | Whether the material uses `glow_color`. |
+| `glow_color` | `Color` | Emissive/tint color. |
+| `melting_point` | `int` | Temperature above which the cell becomes `liquid_form`. |
+| `boiling_point` | `int` | Temperature above which the cell becomes `gas_form`. |
+| `freeze_point` | `int` | Temperature below which the cell becomes `solid_form`. |
+| `solid_form` | `String` | Material to become when freezing. |
+| `liquid_form` | `String` | Material to become when melting. |
+| `gas_form` | `String` | Material to become when boiling. |
+| `thermal_conductivity` | `int` | 0–100; higher values transfer heat faster. |
 
 ## Backend Notes
 
 - **GPU backend** requires a windowed/GPU-capable Godot process. In `--headless` mode it automatically falls back to CPU.
-- GPU uses a Vulkan compute shader with 3 passes: vertical fall, diagonal slide, and horizontal flow. Material properties are synchronised to the GPU for future reaction support.
-- CPU uses an active-region scan so empty areas are skipped and supports full reaction rules (burning, corrosion, explosion, lifetime).
+- GPU uses a Vulkan compute shader with push-mode movement: each cell proposes a target, atomic `CompSwap` resolves conflicts, then resolve/clear passes finalize positions. Reactions, lifetime, heat diffusion and phase changes run in a final pass.
+- CPU uses an active-region scan so empty areas are skipped; movement/reactions are single-threaded while heat/phase-change passes are multi-threaded.
 
 ## Building from Source
 
@@ -172,9 +185,9 @@ cellularfx/
 - [x] GPU compute backend
 - [x] More materials and reaction rules (fire, smoke, acid, oil, wood, gunpowder)
 - [x] Data-driven material rules (lifetime, burning, corrosion, explosion)
-- [ ] Multi-threaded CPU backend
-- [ ] Editor plugin (brush tools, material palette, save/load)
-- [ ] World serialization
+- [x] Multi-threaded CPU backend
+- [x] Editor plugin (brush tools, material palette, save/load)
+- [x] World serialization
 - [ ] Linux & macOS support
 - [ ] Visual effects (glow, distortion, particles)
 
