@@ -55,6 +55,8 @@ private:
     bool current_is_a = true;
 
     godot::RID materials_buf;
+    godot::RID claim_buf;
+    godot::RID moved_to_buf;
     godot::RID uniform_set_a_to_b;
     godot::RID uniform_set_b_to_a;
 

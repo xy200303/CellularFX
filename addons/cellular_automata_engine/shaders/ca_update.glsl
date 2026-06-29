@@ -15,6 +15,14 @@ layout(set = 0, binding = 2, std430) restrict readonly buffer MaterialBuffer {
     uvec4 data[];
 } materials;
 
+layout(set = 0, binding = 3, std430) restrict buffer ClaimBuffer {
+    uint data[];
+} claim;
+
+layout(set = 0, binding = 4, std430) restrict buffer MovedToBuffer {
+    uint data[];
+} moved_to;
+
 layout(push_constant, std430) uniform Params {
     int width;
     int height;
@@ -97,14 +105,6 @@ uint get_corrosion_chance_u8(uint mat_id) {
 
 int get_default_temperature(uint mat_id) {
     return int(get_material_extra(mat_id).x);
-}
-
-uint get_glow_color(uint mat_id) {
-    return get_material_extra(mat_id).y;
-}
-
-bool get_emit_light(uint mat_id) {
-    return get_material_extra(mat_id).z != 0u;
 }
 
 int get_melting_point(uint mat_id) {
@@ -201,25 +201,9 @@ uvec2 dst_at(int x, int y) {
     return dst.cells[cell_index(x, y)];
 }
 
-void clear_dst(int x, int y) {
-    if (x < 0 || x >= params.width || y < 0 || y >= params.height) return;
-    dst.cells[cell_index(x, y)] = uvec2(0u);
-}
-
 void store_dst(int x, int y, uvec2 cell) {
     if (x < 0 || x >= params.width || y < 0 || y >= params.height) return;
     dst.cells[cell_index(x, y)] = cell;
-}
-
-void pull_from(int dst_x, int dst_y, int src_x, int src_y) {
-    uvec2 cell = src_at(src_x, src_y);
-    // Mark moved, clear sleep.
-    uint flags = get_flags(cell);
-    flags |= FLAG_MOVED;
-    flags &= ~FLAG_SLEEP;
-    cell = set_flags(cell, flags);
-    store_dst(dst_x, dst_y, cell);
-    clear_dst(src_x, src_y);
 }
 
 bool can_displace(uint src_id, uint dst_id) {
@@ -241,13 +225,25 @@ bool has_hot_neighbor(int x, int y) {
     return false;
 }
 
-// Simple 2D hash for deterministic pseudo-randomness based on frame seed and position.
 uint hash2(int x, int y) {
     uint h = uint(params.frame_seed) * 73856093u;
     h ^= uint(x) * 19349663u;
     h ^= uint(y) * 83492791u;
     h = (h ^ (h >> 13)) * 1274126177u;
     return h ^ (h >> 16);
+}
+
+// Attempt to claim target position for this source cell.
+bool try_claim(int src_idx, int target_idx) {
+    if (target_idx < 0 || target_idx >= params.width * params.height) return false;
+    uint expected = 0u;
+    uint desired = uint(src_idx + 1);
+    uint old = atomicCompSwap(claim.data[target_idx], expected, desired);
+    if (old == 0u) {
+        atomicExchange(moved_to.data[src_idx], uint(target_idx + 1));
+        return true;
+    }
+    return false;
 }
 
 void main() {
@@ -258,100 +254,108 @@ void main() {
     int x = idx % params.width;
     int y = idx / params.width;
 
-    uvec2 self = src_at(x, y);
-    uint self_id = get_mat_id(self);
-
-    // Movement passes operate on empty destination cells (pull model).
-    if (params.pass_id <= 2) {
-        // Default: copy source to destination.
-        store_dst(x, y, self);
-
-        if (!is_empty(self_id)) {
+    if (params.pass_id == 0) {
+        // Push/claim pass: each source cell tries to move to its preferred target.
+        uvec2 self = src.cells[idx];
+        uint self_id = get_mat_id(self);
+        if (is_empty(self_id) || is_solid(self_id)) {
             return;
         }
 
-        if (params.pass_id == 0) {
-            // Vertical fall for powder/liquid.
-            uint above_id = get_mat_id(src_at(x, y - 1));
-            if (is_movable(above_id) && can_displace(above_id, self_id)) {
-                pull_from(x, y, x, y - 1);
+        int tx = x;
+        int ty = y;
+
+        if (is_gas(self_id)) {
+            if (is_empty(get_mat_id(src_at(x, y - 1)))) {
+                ty = y - 1;
             } else {
-                // Vertical rise for gas.
-                uint below_id = get_mat_id(src_at(x, y + 1));
-                if (is_gas(below_id)) {
-                    pull_from(x, y, x, y + 1);
-                }
-            }
-        } else if (params.pass_id == 1) {
-            // Diagonal fall.
-            uint above_left = get_mat_id(src_at(x - 1, y - 1));
-            uint left = get_mat_id(src_at(x - 1, y));
-            bool can_left = is_movable(above_left) && !is_empty(left) && can_displace(above_left, self_id);
-
-            uint above_right = get_mat_id(src_at(x + 1, y - 1));
-            uint right = get_mat_id(src_at(x + 1, y));
-            bool can_right = is_movable(above_right) && !is_empty(right) && can_displace(above_right, self_id);
-
-            if (can_left && can_right) {
                 bool prefer_left = ((x + y + params.frame_seed) & 1) == 0;
                 if (prefer_left) {
-                    pull_from(x, y, x - 1, y - 1);
+                    if (is_empty(get_mat_id(src_at(x - 1, y - 1)))) { tx = x - 1; ty = y - 1; }
+                    else if (is_empty(get_mat_id(src_at(x + 1, y - 1)))) { tx = x + 1; ty = y - 1; }
                 } else {
-                    pull_from(x, y, x + 1, y - 1);
+                    if (is_empty(get_mat_id(src_at(x + 1, y - 1)))) { tx = x + 1; ty = y - 1; }
+                    else if (is_empty(get_mat_id(src_at(x - 1, y - 1)))) { tx = x - 1; ty = y - 1; }
                 }
-            } else if (can_left) {
-                pull_from(x, y, x - 1, y - 1);
-            } else if (can_right) {
-                pull_from(x, y, x + 1, y - 1);
+            }
+        } else if (is_powder(self_id) || is_liquid(self_id)) {
+            uint below_id = get_mat_id(src_at(x, y + 1));
+            if (can_displace(self_id, below_id)) {
+                ty = y + 1;
             } else {
-                // Diagonal rise for gas.
-                uint below_left = get_mat_id(src_at(x - 1, y + 1));
-                uint bl = get_mat_id(src_at(x - 1, y));
-                bool can_rise_left = is_gas(below_left) && !is_gas(bl);
-
-                uint below_right = get_mat_id(src_at(x + 1, y + 1));
-                uint br = get_mat_id(src_at(x + 1, y));
-                bool can_rise_right = is_gas(below_right) && !is_gas(br);
-
-                if (can_rise_left && can_rise_right) {
-                    bool prefer_left = ((x + y + params.frame_seed) & 1) == 0;
-                    if (prefer_left) {
-                        pull_from(x, y, x - 1, y + 1);
-                    } else {
-                        pull_from(x, y, x + 1, y + 1);
-                    }
-                } else if (can_rise_left) {
-                    pull_from(x, y, x - 1, y + 1);
-                } else if (can_rise_right) {
-                    pull_from(x, y, x + 1, y + 1);
-                }
-            }
-        } else if (params.pass_id == 2) {
-            // Horizontal flow for liquids and gases.
-            uint left_id = get_mat_id(src_at(x - 1, y));
-            uint right_id = get_mat_id(src_at(x + 1, y));
-            bool can_left = (is_liquid(left_id) || is_gas(left_id)) && can_displace(left_id, self_id);
-            bool can_right = (is_liquid(right_id) || is_gas(right_id)) && can_displace(right_id, self_id);
-
-            if (can_left && can_right) {
-                bool prefer_left = ((x + params.frame_seed) & 1) == 0;
+                bool prefer_left = ((x + y + params.frame_seed) & 1) == 0;
                 if (prefer_left) {
-                    pull_from(x, y, x - 1, y);
+                    uint dl_id = get_mat_id(src_at(x - 1, y + 1));
+                    if (can_displace(self_id, dl_id)) { tx = x - 1; ty = y + 1; }
+                    else {
+                        uint dr_id = get_mat_id(src_at(x + 1, y + 1));
+                        if (can_displace(self_id, dr_id)) { tx = x + 1; ty = y + 1; }
+                    }
                 } else {
-                    pull_from(x, y, x + 1, y);
+                    uint dr_id = get_mat_id(src_at(x + 1, y + 1));
+                    if (can_displace(self_id, dr_id)) { tx = x + 1; ty = y + 1; }
+                    else {
+                        uint dl_id = get_mat_id(src_at(x - 1, y + 1));
+                        if (can_displace(self_id, dl_id)) { tx = x - 1; ty = y + 1; }
+                    }
                 }
-            } else if (can_left) {
-                pull_from(x, y, x - 1, y);
-            } else if (can_right) {
-                pull_from(x, y, x + 1, y);
+
+                if (is_liquid(self_id) && tx == x && ty == y) {
+                    bool prefer_left_h = ((x + params.frame_seed) & 1) == 0;
+                    if (prefer_left_h) {
+                        uint l_id = get_mat_id(src_at(x - 1, y));
+                        if (can_displace(self_id, l_id)) tx = x - 1;
+                        else {
+                            uint r_id = get_mat_id(src_at(x + 1, y));
+                            if (can_displace(self_id, r_id)) tx = x + 1;
+                        }
+                    } else {
+                        uint r_id = get_mat_id(src_at(x + 1, y));
+                        if (can_displace(self_id, r_id)) tx = x + 1;
+                        else {
+                            uint l_id = get_mat_id(src_at(x - 1, y));
+                            if (can_displace(self_id, l_id)) tx = x - 1;
+                        }
+                    }
+                }
             }
+        }
+
+        if (tx != x || ty != y) {
+            try_claim(idx, cell_index(tx, ty));
+        }
+        return;
+    }
+
+    if (params.pass_id == 1) {
+        // Resolve pass: each target cell pulls from the claimed source.
+        uint c = claim.data[idx];
+        uvec2 cell;
+        if (c > 0u) {
+            int src_idx = int(c) - 1;
+            cell = src.cells[src_idx];
+            uint flags = get_flags(cell);
+            flags |= FLAG_MOVED;
+            flags &= ~FLAG_SLEEP;
+            cell = set_flags(cell, flags);
+        } else {
+            cell = src.cells[idx];
+        }
+        dst.cells[idx] = cell;
+        return;
+    }
+
+    if (params.pass_id == 2) {
+        // Clear leftover: if this source moved away and no one claimed its old slot, clear it.
+        uint moved = moved_to.data[idx];
+        if (moved > 0u && claim.data[idx] == 0u) {
+            dst.cells[idx] = uvec2(0u);
         }
         return;
     }
 
     // Pass 3: reactions, lifetime decay, heat diffusion and phase changes.
-    // Work on the post-movement destination buffer.
-    uvec2 cell = dst_at(x, y);
+    uvec2 cell = dst.cells[idx];
     uint mat_id = get_mat_id(cell);
     if (is_empty(mat_id)) {
         return;
@@ -359,11 +363,8 @@ void main() {
 
     int temp = get_temperature(cell);
     uint flags = get_flags(cell);
-
-    // Reactions.
     bool reacted = false;
 
-    // Explosion.
     if (is_explosive(mat_id) && !reacted) {
         uint explode_to = get_explode_to(mat_id);
         if (explode_to != 0u && has_hot_neighbor(x, y)) {
@@ -374,7 +375,6 @@ void main() {
         }
     }
 
-    // Burning.
     if (is_flammable(mat_id) && !reacted) {
         uint burn_to = get_burn_to(mat_id);
         if (burn_to != 0u && has_hot_neighbor(x, y)) {
@@ -385,7 +385,6 @@ void main() {
         }
     }
 
-    // Lifetime decay.
     if (!reacted) {
         uint max_life = get_lifetime(mat_id);
         if (max_life > 0u) {
@@ -407,7 +406,6 @@ void main() {
         }
     }
 
-    // Heat diffusion using 4-neighbor average.
     mat_id = get_mat_id(cell);
     uint cond_u = get_thermal_conductivity(mat_id);
     if (cond_u > 0u && !is_empty(mat_id)) {
@@ -432,7 +430,6 @@ void main() {
         temp = clamp(temp, -32768, 32767);
     }
 
-    // Phase changes.
     mat_id = get_mat_id(cell);
     uint new_id = mat_id;
     if (temp > get_boiling_point(mat_id)) {
@@ -450,5 +447,5 @@ void main() {
 
     cell = set_temperature(cell, temp);
     cell = set_flags(cell, flags);
-    store_dst(x, y, cell);
+    dst.cells[idx] = cell;
 }

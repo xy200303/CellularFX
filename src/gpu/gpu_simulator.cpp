@@ -168,6 +168,13 @@ void GPUSimulator::init(int p_width, int p_height) {
     buf_a = rd->storage_buffer_create(size_bytes, empty_data);
     buf_b = rd->storage_buffer_create(size_bytes, empty_data);
 
+    uint32_t claim_size = static_cast<uint32_t>(total_cells * sizeof(uint32_t));
+    godot::PackedByteArray claim_empty;
+    claim_empty.resize(static_cast<int32_t>(claim_size));
+    memset(claim_empty.ptrw(), 0, claim_size);
+    claim_buf = rd->storage_buffer_create(claim_size, claim_empty);
+    moved_to_buf = rd->storage_buffer_create(claim_size, claim_empty);
+
     cpu_grid.resize(static_cast<size_t>(total_cells) * 2, 0);
     gpu_grid_dirty = false;
     cpu_grid_dirty = false;
@@ -182,7 +189,7 @@ void GPUSimulator::init(int p_width, int p_height) {
 }
 
 void GPUSimulator::create_uniform_sets() {
-    if (rd == nullptr || !shader.is_valid() || !buf_a.is_valid() || !buf_b.is_valid()) {
+    if (rd == nullptr || !shader.is_valid() || !buf_a.is_valid() || !buf_b.is_valid() || !claim_buf.is_valid() || !moved_to_buf.is_valid()) {
         return;
     }
 
@@ -203,6 +210,8 @@ void GPUSimulator::create_uniform_sets() {
         uniforms.push_back(make_uniform(0, buf_a));
         uniforms.push_back(make_uniform(1, buf_b));
         uniforms.push_back(make_uniform(2, materials_buf));
+        uniforms.push_back(make_uniform(3, claim_buf));
+        uniforms.push_back(make_uniform(4, moved_to_buf));
         uniform_set_a_to_b = rd->uniform_set_create(uniforms, shader, 0);
     }
     {
@@ -210,6 +219,8 @@ void GPUSimulator::create_uniform_sets() {
         uniforms.push_back(make_uniform(0, buf_b));
         uniforms.push_back(make_uniform(1, buf_a));
         uniforms.push_back(make_uniform(2, materials_buf));
+        uniforms.push_back(make_uniform(3, claim_buf));
+        uniforms.push_back(make_uniform(4, moved_to_buf));
         uniform_set_b_to_a = rd->uniform_set_create(uniforms, shader, 0);
     }
 }
@@ -247,10 +258,21 @@ void GPUSimulator::update() {
         sync_gpu_from_cpu();
     }
 
-    const int PASSES = 4;
-    for (int pass = 0; pass < PASSES; pass++) {
-        godot::RID set = (current_is_a == (pass % 2 == 0)) ? uniform_set_a_to_b : uniform_set_b_to_a;
+    // Clear per-frame auxiliary buffers.
+    uint32_t claim_size = static_cast<uint32_t>(total_cells * sizeof(uint32_t));
+    {
+        static thread_local godot::PackedByteArray zero_claim;
+        if (zero_claim.size() != static_cast<int32_t>(claim_size)) {
+            zero_claim.resize(static_cast<int32_t>(claim_size));
+            memset(zero_claim.ptrw(), 0, claim_size);
+        }
+        rd->buffer_update(claim_buf, 0, claim_size, zero_claim);
+        rd->buffer_update(moved_to_buf, 0, claim_size, zero_claim);
+    }
 
+    const int PASSES = 4;
+    godot::RID set = current_is_a ? uniform_set_a_to_b : uniform_set_b_to_a;
+    for (int pass = 0; pass < PASSES; pass++) {
         godot::PackedByteArray push;
         push.resize(16);
         int32_t *p = reinterpret_cast<int32_t *>(push.ptrw());
@@ -343,6 +365,12 @@ void GPUSimulator::clear() {
         memset(empty_data.ptrw(), 0, size_bytes);
         rd->buffer_update(buf_a, 0, size_bytes, empty_data);
         rd->buffer_update(buf_b, 0, size_bytes, empty_data);
+        uint32_t claim_size = static_cast<uint32_t>(total_cells * sizeof(uint32_t));
+        godot::PackedByteArray claim_empty;
+        claim_empty.resize(static_cast<int32_t>(claim_size));
+        memset(claim_empty.ptrw(), 0, claim_size);
+        rd->buffer_update(claim_buf, 0, claim_size, claim_empty);
+        rd->buffer_update(moved_to_buf, 0, claim_size, claim_empty);
     }
     gpu_grid_dirty = false;
     cpu_grid_dirty = false;
@@ -354,6 +382,8 @@ void GPUSimulator::shutdown() {
     free_rid_safely(uniform_set_b_to_a);
     free_rid_safely(buf_a);
     free_rid_safely(buf_b);
+    free_rid_safely(claim_buf);
+    free_rid_safely(moved_to_buf);
     free_rid_safely(materials_buf);
     free_rid_safely(pipeline);
     free_rid_safely(shader);

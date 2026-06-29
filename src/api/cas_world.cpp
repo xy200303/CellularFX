@@ -220,8 +220,17 @@ Ref<Image> CASWorld::get_image() const {
 }
 
 Ref<Texture2D> CASWorld::get_texture() {
+	if (simulator == nullptr) {
+		return Ref<Texture2D>();
+	}
+	godot::Ref<godot::Image> img = simulator->get_image();
+	if (img.is_null()) {
+		return Ref<Texture2D>();
+	}
 	if (texture.is_null()) {
-		texture.instantiate();
+		texture = godot::ImageTexture::create_from_image(img);
+	} else {
+		texture->update(img);
 	}
 	return texture;
 }
