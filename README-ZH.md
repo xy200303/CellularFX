@@ -188,6 +188,22 @@ scons platform=windows target=template_debug arch=x86_64 build_profile=build_pro
 
 > ⚠️ **重要**：在 Windows 上必须使用 **MSVC**，不能用 MinGW，因为 Godot 官方 Windows 二进制是 MSVC ABI，GDExtension 必须 ABI 匹配。
 
+### 编辑器打开很慢？
+
+如果你直接在 Godot 编辑器中打开源码仓库，首次文件扫描可能会很慢，因为 `godot-cpp/` 子模块包含数千个头文件和生成的源码文件，编辑器打开时会扫描整个 `res://` 树。
+
+解决方案：
+
+1. **使用发布版插件包**（`cellular_automata_engine.zip`）。它只包含插件文件和预编译 DLL，在空 Godot 项目中打开很快。
+2. **开发时把 godot-cpp 移到项目树外**：
+   ```bash
+   mv godot-cpp ../godot-cpp
+   set GODOT_CPP_PATH=..\godot-cpp
+   scons -j8 target=template_debug
+   ```
+   这样可以把庞大的子模块排除在 Godot 文件扫描之外。
+3. 等待首次扫描完成；后续打开会复用 `.godot/` 导入缓存，速度会快很多。
+
 ## 项目结构
 
 ```text

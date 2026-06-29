@@ -2,7 +2,17 @@
 import os
 import sys
 
-env = SConscript("godot-cpp/SConstruct")
+# Allow developers to keep the heavy godot-cpp submodule outside the Godot
+# project tree (e.g. ../godot-cpp) so the editor does not scan thousands of
+# files on every open. Falls back to the bundled godot-cpp/ directory.
+godot_cpp_path = os.environ.get("GODOT_CPP_PATH", "godot-cpp")
+sconstruct_path = os.path.join(godot_cpp_path, "SConstruct")
+if not os.path.isfile(sconstruct_path):
+    print("Error: godot-cpp SConstruct not found at {}".format(sconstruct_path))
+    print("Set GODOT_CPP_PATH to a valid godot-cpp checkout, or keep it at ./godot-cpp.")
+    sys.exit(1)
+
+env = SConscript(sconstruct_path)
 
 # Add source files
 env.Append(CPPPATH=["src/"])

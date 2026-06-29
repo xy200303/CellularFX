@@ -40,6 +40,7 @@ void CASWorld::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_image"), &CASWorld::get_image);
 	ClassDB::bind_method(D_METHOD("get_texture"), &CASWorld::get_texture);
 	ClassDB::bind_method(D_METHOD("get_particle_count"), &CASWorld::get_particle_count);
+	ClassDB::bind_method(D_METHOD("get_registered_material_names"), &CASWorld::get_registered_material_names);
 
 	ClassDB::bind_method(D_METHOD("save_world", "path"), &CASWorld::save_world);
 	ClassDB::bind_method(D_METHOD("load_world", "path"), &CASWorld::load_world);
@@ -243,6 +244,24 @@ int CASWorld::get_particle_count() const {
 		return 0;
 	}
 	return simulator->get_particle_count();
+}
+
+PackedStringArray CASWorld::get_registered_material_names() const {
+	PackedStringArray names;
+	if (simulator == nullptr) {
+		return names;
+	}
+	ca::MaterialRegistry *reg = get_registry(const_cast<CASWorld *>(this)->simulator);
+	if (reg == nullptr) {
+		return names;
+	}
+	const std::vector<ca::Material> &materials = reg->get_all();
+	for (const ca::Material &m : materials) {
+		if (!m.name.empty()) {
+			names.append(String(m.name.c_str()));
+		}
+	}
+	return names;
 }
 
 Error CASWorld::save_world(const String &p_path) const {

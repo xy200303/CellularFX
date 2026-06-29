@@ -218,6 +218,11 @@ func _refresh_materials() -> void:
 
 
 func _scan_materials(dir_path: String, acc: Array) -> Array:
+	var skip_dirs := [".godot", "godot-cpp", "tmp_source", "dist"]
+	var dir_name := dir_path.get_file()
+	if dir_name in skip_dirs:
+		return acc
+
 	var dir := DirAccess.open(dir_path)
 	if dir == null:
 		return acc
@@ -241,14 +246,9 @@ func _refresh_registry_materials() -> void:
 	material_option.clear()
 	if world == null:
 		return
-	# Refresh from the world registry by querying known materials indirectly.
-	# Since there is no public registry API, we scan the project for CASMaterial
-	# resources and assume they have been registered by the user scene.
-	var files := _scan_materials("res://", [])
-	for f in files:
-		var res := ResourceLoader.load(f, "CASMaterial", ResourceLoader.CACHE_MODE_IGNORE) as CASMaterial
-		if res != null:
-			material_option.add_item(res.material_name)
+	var names := world.get_registered_material_names()
+	for name in names:
+		material_option.add_item(name)
 	if material_option.item_count > 0:
 		_brush_material = material_option.get_item_text(0)
 

@@ -188,6 +188,22 @@ scons platform=windows target=template_debug arch=x86_64 build_profile=build_pro
 
 > ⚠️ **Important**: on Windows you must use **MSVC**, not MinGW, because Godot's official Windows binaries are MSVC-ABI and GDExtension ABI must match.
 
+### Editor opens slowly?
+
+If you open the source repository directly in the Godot editor, the first scan can take a long time because the `godot-cpp/` submodule contains thousands of headers and generated source files. The editor scans the whole `res://` tree on open.
+
+Options to avoid this:
+
+1. **Use the release addon** (`cellular_automata_engine.zip`). It contains only the plugin files and pre-built DLLs, so it opens instantly in an empty Godot project.
+2. **Keep godot-cpp outside the project tree** while developing:
+   ```bash
+   mv godot-cpp ../godot-cpp
+   set GODOT_CPP_PATH=..\godot-cpp
+   scons -j8 target=template_debug
+   ```
+   This keeps the heavy submodule out of Godot's file scan.
+3. Wait for the first scan to finish; subsequent opens reuse the `.godot/` import cache and are faster.
+
 ## Project Structure
 
 ```text
