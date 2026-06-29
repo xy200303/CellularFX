@@ -7,6 +7,7 @@ namespace ca {
 
 struct Cell {
     uint16_t material_id = 0;
+    int16_t temperature = 0;
     uint8_t flags = 0;
 
     static constexpr uint8_t FLAG_MOVED = 1 << 0;

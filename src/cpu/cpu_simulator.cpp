@@ -191,6 +191,83 @@ void CPUSimulator::apply_reactions(int p_x, int p_y) {
     }
 }
 
+void CPUSimulator::apply_thermal_and_phase_changes(int p_min_x, int p_max_x, int p_min_y, int p_max_y) {
+    // Initialize temperatures in the next buffer from current for non-empty cells.
+    for (int y = p_min_y; y <= p_max_y; y++) {
+        for (int x = p_min_x; x <= p_max_x; x++) {
+            Cell &next = grid.cell_next(x, y);
+            if (next.material_id != 0) {
+                next.temperature = grid.cell_current(x, y).temperature;
+            }
+        }
+    }
+
+    // Heat diffusion using 4-neighbor average.
+    std::vector<int16_t> new_temperatures((p_max_x - p_min_x + 1) * (p_max_y - p_min_y + 1));
+    for (int y = p_min_y; y <= p_max_y; y++) {
+        for (int x = p_min_x; x <= p_max_x; x++) {
+            Cell &next = grid.cell_next(x, y);
+            if (next.material_id == 0) {
+                continue;
+            }
+            const Material *mat = registry.get_material(next.material_id);
+            int conductivity = std::clamp(mat->thermal_conductivity, 0, 100);
+            int32_t sum = next.temperature;
+            int count = 1;
+            const int dxs[4] = {-1, 1, 0, 0};
+            const int dys[4] = {0, 0, -1, 1};
+            for (int i = 0; i < 4; i++) {
+                int nx = x + dxs[i];
+                int ny = y + dys[i];
+                if (!grid.in_bounds(nx, ny)) {
+                    continue;
+                }
+                const Cell &neighbor = grid.cell_next(nx, ny);
+                if (neighbor.material_id == 0) {
+                    continue;
+                }
+                sum += neighbor.temperature;
+                count++;
+            }
+            int32_t avg = sum / count;
+            int32_t diff = avg - next.temperature;
+            int32_t change = (diff * conductivity) / 100;
+            int idx = (y - p_min_y) * (p_max_x - p_min_x + 1) + (x - p_min_x);
+            new_temperatures[idx] = static_cast<int16_t>(std::clamp(next.temperature + change, static_cast<int32_t>(-32768), static_cast<int32_t>(32767)));
+        }
+    }
+
+    // Apply new temperatures and resolve phase changes.
+    for (int y = p_min_y; y <= p_max_y; y++) {
+        for (int x = p_min_x; x <= p_max_x; x++) {
+            Cell &next = grid.cell_next(x, y);
+            if (next.material_id == 0) {
+                continue;
+            }
+            int idx = (y - p_min_y) * (p_max_x - p_min_x + 1) + (x - p_min_x);
+            next.temperature = new_temperatures[idx];
+
+            const Material *mat = registry.get_material(next.material_id);
+            uint16_t new_mat_id = next.material_id;
+            if (next.temperature > mat->boiling_point && !mat->gas_form.empty()) {
+                new_mat_id = resolve_material_name(mat->gas_form);
+            } else if (next.temperature < mat->freeze_point && !mat->solid_form.empty()) {
+                new_mat_id = resolve_material_name(mat->solid_form);
+            } else if (next.temperature > mat->melting_point && !mat->liquid_form.empty()) {
+                new_mat_id = resolve_material_name(mat->liquid_form);
+            }
+            if (new_mat_id != next.material_id && new_mat_id != 0) {
+                next.material_id = new_mat_id;
+                next.flags = 0;
+                const Material *new_mat = registry.get_material(new_mat_id);
+                if (new_mat != nullptr) {
+                    next.temperature = static_cast<int16_t>(new_mat->temperature);
+                }
+            }
+        }
+    }
+}
+
 void CPUSimulator::update() {
     frame_counter++;
     const bool wake_sleeping = (frame_counter % 10u) == 0u;
@@ -351,6 +428,9 @@ void CPUSimulator::update() {
         }
     }
 
+    // Heat diffusion and phase change over the next buffer.
+    apply_thermal_and_phase_changes(min_x, max_x, min_y, max_y);
+
     grid.swap_buffers();
 
     active_region_valid = new_region_valid;
@@ -368,6 +448,8 @@ void CPUSimulator::set_cell(int p_x, int p_y, uint16_t p_material_id) {
     }
     grid.cell_current(p_x, p_y).material_id = p_material_id;
     grid.cell_current(p_x, p_y).flags = 0;
+    const Material *mat = registry.get_material(p_material_id);
+    grid.cell_current(p_x, p_y).temperature = mat ? static_cast<int16_t>(mat->temperature) : static_cast<int16_t>(0);
     if (p_material_id != 0) {
         expand_active_region(p_x, p_y);
     }

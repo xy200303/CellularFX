@@ -33,6 +33,7 @@ private:
     uint16_t resolve_material_name(const std::string &p_name) const;
     bool is_hot_neighbor(int p_x, int p_y) const;
     void apply_reactions(int p_x, int p_y);
+    void apply_thermal_and_phase_changes(int p_min_x, int p_max_x, int p_min_y, int p_max_y);
 
     void reset_active_region();
     void expand_active_region(int p_x, int p_y);

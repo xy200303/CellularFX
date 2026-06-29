@@ -48,6 +48,15 @@ private:
     int velocity_x = 0;
     int velocity_y = 0;
 
+    // Phase change.
+    int melting_point = 1000;
+    int boiling_point = 1000;
+    int freeze_point = -1000;
+    String solid_form = "";
+    String liquid_form = "";
+    String gas_form = "";
+    int thermal_conductivity = 10;
+
 protected:
     static void _bind_methods();
 
@@ -105,6 +114,27 @@ public:
 
     void set_velocity_y(int p_value);
     int get_velocity_y() const;
+
+    void set_melting_point(int p_value);
+    int get_melting_point() const;
+
+    void set_boiling_point(int p_value);
+    int get_boiling_point() const;
+
+    void set_freeze_point(int p_value);
+    int get_freeze_point() const;
+
+    void set_solid_form(const String &p_name);
+    String get_solid_form() const;
+
+    void set_liquid_form(const String &p_name);
+    String get_liquid_form() const;
+
+    void set_gas_form(const String &p_name);
+    String get_gas_form() const;
+
+    void set_thermal_conductivity(int p_value);
+    int get_thermal_conductivity() const;
 };
 
 } // namespace godot

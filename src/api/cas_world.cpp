@@ -161,6 +161,13 @@ void CASWorld::register_material(const Ref<CASMaterial> &p_material) {
 	mat.glow_color = p_material->get_glow_color();
 	mat.velocity_x = p_material->get_velocity_x();
 	mat.velocity_y = p_material->get_velocity_y();
+	mat.melting_point = p_material->get_melting_point();
+	mat.boiling_point = p_material->get_boiling_point();
+	mat.freeze_point = p_material->get_freeze_point();
+	mat.solid_form = std::string(p_material->get_solid_form().utf8().get_data());
+	mat.liquid_form = std::string(p_material->get_liquid_form().utf8().get_data());
+	mat.gas_form = std::string(p_material->get_gas_form().utf8().get_data());
+	mat.thermal_conductivity = p_material->get_thermal_conductivity();
 
 	ca::MaterialRegistry *reg = get_registry(simulator);
 	if (reg == nullptr) {

@@ -59,6 +59,27 @@ void CASMaterial::_bind_methods() {
     ClassDB::bind_method(D_METHOD("set_velocity_y", "value"), &CASMaterial::set_velocity_y);
     ClassDB::bind_method(D_METHOD("get_velocity_y"), &CASMaterial::get_velocity_y);
 
+    ClassDB::bind_method(D_METHOD("set_melting_point", "value"), &CASMaterial::set_melting_point);
+    ClassDB::bind_method(D_METHOD("get_melting_point"), &CASMaterial::get_melting_point);
+
+    ClassDB::bind_method(D_METHOD("set_boiling_point", "value"), &CASMaterial::set_boiling_point);
+    ClassDB::bind_method(D_METHOD("get_boiling_point"), &CASMaterial::get_boiling_point);
+
+    ClassDB::bind_method(D_METHOD("set_freeze_point", "value"), &CASMaterial::set_freeze_point);
+    ClassDB::bind_method(D_METHOD("get_freeze_point"), &CASMaterial::get_freeze_point);
+
+    ClassDB::bind_method(D_METHOD("set_solid_form", "name"), &CASMaterial::set_solid_form);
+    ClassDB::bind_method(D_METHOD("get_solid_form"), &CASMaterial::get_solid_form);
+
+    ClassDB::bind_method(D_METHOD("set_liquid_form", "name"), &CASMaterial::set_liquid_form);
+    ClassDB::bind_method(D_METHOD("get_liquid_form"), &CASMaterial::get_liquid_form);
+
+    ClassDB::bind_method(D_METHOD("set_gas_form", "name"), &CASMaterial::set_gas_form);
+    ClassDB::bind_method(D_METHOD("get_gas_form"), &CASMaterial::get_gas_form);
+
+    ClassDB::bind_method(D_METHOD("set_thermal_conductivity", "value"), &CASMaterial::set_thermal_conductivity);
+    ClassDB::bind_method(D_METHOD("get_thermal_conductivity"), &CASMaterial::get_thermal_conductivity);
+
     ADD_PROPERTY(PropertyInfo(Variant::STRING, "material_name"), "set_material_name", "get_material_name");
     ADD_PROPERTY(PropertyInfo(Variant::INT, "material_type", PROPERTY_HINT_ENUM, "Solid,Powder,Liquid,Gas"), "set_material_type", "get_material_type");
     ADD_PROPERTY(PropertyInfo(Variant::COLOR, "material_color"), "set_material_color", "get_material_color");
@@ -87,6 +108,15 @@ void CASMaterial::_bind_methods() {
     ADD_PROPERTY(PropertyInfo(Variant::COLOR, "glow_color"), "set_glow_color", "get_glow_color");
     ADD_PROPERTY(PropertyInfo(Variant::INT, "velocity_x"), "set_velocity_x", "get_velocity_x");
     ADD_PROPERTY(PropertyInfo(Variant::INT, "velocity_y"), "set_velocity_y", "get_velocity_y");
+
+    ADD_GROUP("Phase Change", "");
+    ADD_PROPERTY(PropertyInfo(Variant::INT, "melting_point"), "set_melting_point", "get_melting_point");
+    ADD_PROPERTY(PropertyInfo(Variant::INT, "boiling_point"), "set_boiling_point", "get_boiling_point");
+    ADD_PROPERTY(PropertyInfo(Variant::INT, "freeze_point"), "set_freeze_point", "get_freeze_point");
+    ADD_PROPERTY(PropertyInfo(Variant::STRING, "solid_form"), "set_solid_form", "get_solid_form");
+    ADD_PROPERTY(PropertyInfo(Variant::STRING, "liquid_form"), "set_liquid_form", "get_liquid_form");
+    ADD_PROPERTY(PropertyInfo(Variant::STRING, "gas_form"), "set_gas_form", "get_gas_form");
+    ADD_PROPERTY(PropertyInfo(Variant::INT, "thermal_conductivity"), "set_thermal_conductivity", "get_thermal_conductivity");
 
     BIND_ENUM_CONSTANT(TYPE_SOLID);
     BIND_ENUM_CONSTANT(TYPE_POWDER);
@@ -236,4 +266,60 @@ void CASMaterial::set_velocity_y(int p_value) {
 
 int CASMaterial::get_velocity_y() const {
     return velocity_y;
+}
+
+void CASMaterial::set_melting_point(int p_value) {
+    melting_point = p_value;
+}
+
+int CASMaterial::get_melting_point() const {
+    return melting_point;
+}
+
+void CASMaterial::set_boiling_point(int p_value) {
+    boiling_point = p_value;
+}
+
+int CASMaterial::get_boiling_point() const {
+    return boiling_point;
+}
+
+void CASMaterial::set_freeze_point(int p_value) {
+    freeze_point = p_value;
+}
+
+int CASMaterial::get_freeze_point() const {
+    return freeze_point;
+}
+
+void CASMaterial::set_solid_form(const String &p_name) {
+    solid_form = p_name;
+}
+
+String CASMaterial::get_solid_form() const {
+    return solid_form;
+}
+
+void CASMaterial::set_liquid_form(const String &p_name) {
+    liquid_form = p_name;
+}
+
+String CASMaterial::get_liquid_form() const {
+    return liquid_form;
+}
+
+void CASMaterial::set_gas_form(const String &p_name) {
+    gas_form = p_name;
+}
+
+String CASMaterial::get_gas_form() const {
+    return gas_form;
+}
+
+void CASMaterial::set_thermal_conductivity(int p_value) {
+    thermal_conductivity = p_value;
+}
+
+int CASMaterial::get_thermal_conductivity() const {
+    return thermal_conductivity;
 }

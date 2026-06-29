@@ -50,6 +50,17 @@ struct Material {
     int velocity_x = 0;
     int velocity_y = 0;
 
+    // Phase change (temperature-driven material transitions).
+    int melting_point = 1000;
+    int boiling_point = 1000;
+    int freeze_point = -1000;
+    std::string solid_form;
+    std::string liquid_form;
+    std::string gas_form;
+
+    // Heat transfer rate (0-100).
+    int thermal_conductivity = 10;
+
     bool is_empty() const { return id == 0; }
 };
 
