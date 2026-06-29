@@ -1,0 +1,15 @@
+# Godot
+.godot/
+android/
+
+# Build artifacts
+*.obj
+*.lib
+*.exp
+*.dll
+*.pdb
+.sconsign.dblite
+
+# OS
+.DS_Store
+Thumbs.db

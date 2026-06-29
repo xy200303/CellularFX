@@ -1,0 +1,54 @@
+#ifndef CPU_SIMULATOR_H
+#define CPU_SIMULATOR_H
+
+#include "core/isimulator.h"
+#include "core/world_grid.h"
+#include "core/material_registry.h"
+
+#include <godot_cpp/classes/image.hpp>
+#include <memory>
+#include <random>
+
+namespace ca {
+
+class CPUSimulator : public ISimulator {
+private:
+    int width = 0;
+    int height = 0;
+    WorldGrid grid;
+    MaterialRegistry registry;
+    godot::Ref<godot::Image> image;
+    std::mt19937 rng;
+
+    bool active_region_valid = false;
+    int active_min_x = 0;
+    int active_max_x = 0;
+    int active_min_y = 0;
+    int active_max_y = 0;
+
+    bool can_move_to(int p_x, int p_y, uint16_t p_current_mat) const;
+    void move_particle(int p_x, int p_y, int p_tx, int p_ty);
+
+    void reset_active_region();
+    void expand_active_region(int p_x, int p_y);
+
+public:
+    CPUSimulator();
+    ~CPUSimulator() override;
+
+    void init(int p_width, int p_height) override;
+    void update() override;
+    void set_cell(int p_x, int p_y, uint16_t p_material_id) override;
+    uint16_t get_cell(int p_x, int p_y) const override;
+    godot::Ref<godot::Image> get_image() override;
+    int get_particle_count() const override;
+    void clear() override;
+    void shutdown() override;
+
+    MaterialRegistry &get_registry() { return registry; }
+    const MaterialRegistry &get_registry() const { return registry; }
+};
+
+} // namespace ca
+
+#endif // CPU_SIMULATOR_H

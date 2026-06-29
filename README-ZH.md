@@ -1,0 +1,175 @@
+# CellularFX
+
+[![Godot 4.2+](https://img.shields.io/badge/Godot-4.2%2B-blue.svg)](https://godotengine.org)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)]()
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
+一款面向 Godot 4 的高性能**元胞自动机 / 落沙引擎**，使用 C++ 编写 GDExtension，并支持可选的 GPU 计算加速。
+
+[English README](README.md)
+
+---
+
+## 特性
+
+- **双后端**：运行时可在 CPU 与 GPU 模拟之间切换。
+  - CPU 后端：单线程 + 活跃区域优化。
+  - GPU 后端：Vulkan Compute Shader 大规模并行更新。
+- **材料系统**：以 Godot `Resource` 资源定义材料（名称、类型、颜色、密度）。
+  - 内置材料类型：固体、粉末、液体、气体。
+  - 行为：重力下落、斜向滑落、水平流动、基于密度的液体置换。
+- **大网格**：高效模拟 256×256 到 1024×1024 规模的世界。
+- **运行时 API**：通过 GDScript 初始化、更新、绘制、清空、切换后端。
+- **编辑器友好**：可直接在 Godot 编辑器中使用；材料可在 Inspector 中配置。
+
+## 支持平台
+
+| 平台 | 状态 | 说明 |
+|---|---|---|
+| Windows | ✅ 已测试 | 必须使用 MSVC ABI（见构建说明） |
+| Linux | 🚧 计划中 | |
+| macOS | 🚧 计划中 | |
+| Android / Web | 🚧 未来 | |
+
+## 安装
+
+### 方式一：Godot 资源平台（推荐，发布后）
+
+在 Godot 资源平台搜索 **"CellularFX"** 并安装到项目。
+
+### 方式二：手动安装
+
+1. 从 [Releases](https://github.com/yourname/cellularfx/releases) 下载最新版本。
+2. 将 `addons/cellular_automata_engine/` 文件夹复制到你的 Godot 项目中。
+3. 在 **项目 → 项目设置 → 插件 → CellularFX** 中启用插件。
+
+## 快速开始
+
+```gdscript
+extends Node2D
+
+@onready var world: CASWorld = $CASWorld
+
+func _ready():
+    # 可选：在 init() 前切换到 GPU 后端
+    world.set_backend(CASWorld.BACKEND_GPU)
+    world.init(256, 256)
+
+    # 注册材料
+    var sand := CASMaterial.new()
+    sand.material_name = "sand"
+    sand.material_type = CASMaterial.TYPE_POWDER
+    sand.material_color = Color(0.76, 0.70, 0.50)
+    sand.density = 5
+    world.register_material(sand)
+
+    var water := CASMaterial.new()
+    water.material_name = "water"
+    water.material_type = CASMaterial.TYPE_LIQUID
+    water.material_color = Color(0.25, 0.50, 1.0)
+    water.density = 3
+    world.register_material(water)
+
+    var stone := CASMaterial.new()
+    stone.material_name = "stone"
+    stone.material_type = CASMaterial.TYPE_SOLID
+    stone.material_color = Color(0.5, 0.5, 0.5)
+    stone.density = 10
+    world.register_material(stone)
+
+    # 放置一些沙子
+    world.set_cell(128, 10, "sand")
+
+func _process(_delta):
+    world.update()
+```
+
+## API 参考
+
+### CASWorld
+
+| 方法 | 说明 |
+|---|---|
+| `init(width, height)` | 创建模拟网格。 |
+| `set_backend(backend)` | `BACKEND_CPU` 或 `BACKEND_GPU`，需在 `init()` 前调用。 |
+| `get_backend_name()` | 返回 `"CPU"` 或 `"GPU"`。 |
+| `register_material(material)` | 注册一个 `CASMaterial` 资源。 |
+| `set_cell(x, y, material_name)` | 在指定位置放置材料。 |
+| `get_cell(x, y)` | 获取指定位置的材料名称。 |
+| `update()` | 推进一帧模拟。 |
+| `clear()` | 清空世界。 |
+| `get_texture()` | 获取渲染用的 `Texture2D`。 |
+| `get_particle_count()` | 获取非空单元格数量。 |
+
+### CASMaterial
+
+| 属性 | 类型 | 说明 |
+|---|---|---|
+| `material_name` | `String` | 唯一材料标识。 |
+| `material_type` | `int` | `TYPE_SOLID`、`TYPE_POWDER`、`TYPE_LIQUID`、`TYPE_GAS`。 |
+| `material_color` | `Color` | 显示颜色。 |
+| `density` | `int` | 同类型液体之间的置换依据。 |
+
+## 后端说明
+
+- **GPU 后端**需要带 GPU 的窗口化 Godot 进程。在 `--headless` 模式下会自动回退到 CPU。
+- GPU 使用 Vulkan 计算着色器，分 3 个 pass：垂直下落、斜向滑落、液体水平流动。
+- CPU 使用活跃区域扫描，空区域自动跳过。
+
+## 从源码构建
+
+### 环境要求
+
+- Godot 4.2+（Windows 官方二进制使用 MSVC 构建）
+- Python 3 + SCons
+- Visual Studio 2022 及 C++ 工作负载（Windows）
+- 已初始化的 Git 子模块
+
+### 步骤
+
+```bash
+git clone --recursive https://github.com/yourname/cellularfx.git
+cd cellularfx
+scons platform=windows target=template_debug arch=x86_64 build_profile=build_profile.json -j4
+```
+
+> ⚠️ **重要**：在 Windows 上必须使用 **MSVC**，不能用 MinGW，因为 Godot 官方 Windows 二进制是 MSVC ABI，GDExtension 必须 ABI 匹配。
+
+## 项目结构
+
+```text
+cellularfx/
+├── addons/cellular_automata_engine/   # 插件文件、GDExtension 配置、图标、着色器
+├── demo/                              # 示例场景与测试
+├── src/
+│   ├── api/                           # CASWorld、CASMaterial（面向 GDScript）
+│   ├── core/                          # Cell、WorldGrid、MaterialRegistry、ISimulator
+│   ├── cpu/                           # CPUSimulator
+│   └── gpu/                           # GPUSimulator + 计算着色器
+├── godot-cpp/                         # godot-cpp 子模块
+├── build_profile.json                 # 裁剪后的 godot-cpp API，加速构建
+├── SConstruct
+└── README.md
+```
+
+## 路线图
+
+- [x] GDExtension 骨架与 MSVC 构建
+- [x] CPU 后端 MVP
+- [x] CPU 活跃区域优化
+- [x] GPU 计算后端
+- [ ] 更多材料（火、烟、酸、岩浆、冰、油、植物、炸药等）
+- [ ] 数据驱动的材料规则
+- [ ] 多线程 CPU 后端
+- [ ] 编辑器插件（笔刷、材料面板、保存/加载）
+- [ ] 世界序列化
+- [ ] Linux 与 macOS 支持
+- [ ] 视觉效果（发光、扭曲、粒子）
+
+## 许可证
+
+[MIT License](LICENSE)
+
+## 致谢
+
+基于 [godot-cpp](https://github.com/godotengine/godot-cpp) 构建。

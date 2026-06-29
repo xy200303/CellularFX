@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://clrs1jo0trroj"
+path="res://.godot/imported/ca_update.glsl-80fe3b1445085f4309297e717c8c65fa.res"
+
+[deps]
+
+source_file="res://addons/cellular_automata_engine/shaders/ca_update.glsl"
+dest_files=["res://.godot/imported/ca_update.glsl-80fe3b1445085f4309297e717c8c65fa.res"]
+
+[params]
+

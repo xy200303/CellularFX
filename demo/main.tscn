@@ -1,0 +1,18 @@
+[gd_scene format=3 uid="uid://c3y7fwdmw67ur"]
+
+[ext_resource type="Script" uid="uid://doeypqxue3tvh" path="res://demo/main.gd" id="1_dby6u"]
+
+[node name="Main" type="Node2D" unique_id=1875641683]
+script = ExtResource("1_dby6u")
+
+[node name="CASWorld" type="CASWorld" parent="." unique_id=1925828310]
+
+[node name="TextureRect" type="TextureRect" parent="." unique_id=570766274]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 3.0
+offset_right = 1027.0
+offset_bottom = 1024.0
+grow_horizontal = 2
+grow_vertical = 2
