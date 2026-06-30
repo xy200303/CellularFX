@@ -95,7 +95,7 @@
 
 | 版本 | 下载 |
 |------|------|
-| v0.1.0 | [cellular_automata_engine.zip](https://raw.githubusercontent.com/xy200303/CellularFX/baa4a03bc77f445dd6f179d135fccbd8bae3e985/cellular_automata_engine.zip) |
+| v0.1.0 | [cellular_automata_engine.zip](https://raw.githubusercontent.com/xy200303/CellularFX/eef3b23d4f4419233068c93faf351b2629caec00/cellular_automata_engine.zip) |
 
 ## 快速开始
 
