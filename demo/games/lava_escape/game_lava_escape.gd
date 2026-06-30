@@ -19,6 +19,9 @@ var jump_cooldown := 0.0
 var game_over := false
 var game_won := false
 
+var score := 0
+var high_score := 0
+
 var status_label: Label
 
 
@@ -47,6 +50,8 @@ func _process(delta: float) -> void:
 	if game_over or game_won:
 		return
 
+	score += 1
+
 	move_timer += delta
 	jump_cooldown = max(0.0, jump_cooldown - delta)
 
@@ -59,13 +64,13 @@ func _process(delta: float) -> void:
 		elif Input.is_action_pressed("ui_right"):
 			new_pos.x += 1
 		if new_pos != player_pos and can_move_to(new_pos):
-			move_player(new_pos)
+			move_player(new_pos, false)
 			moved = true
 
 	if Input.is_action_just_pressed("ui_up") and jump_cooldown <= 0.0:
 		var up := player_pos + Vector2i(0, -1)
 		if can_move_to(up):
-			move_player(up)
+			move_player(up, true)
 			jump_cooldown = 0.18
 
 	spawn_lava()
@@ -73,15 +78,20 @@ func _process(delta: float) -> void:
 
 	if check_player_died():
 		game_over = true
-		status_label.text = "GAME OVER\nPress R to restart"
+		if score > high_score:
+			high_score = score
+		status_label.text = "GAME OVER\nScore: %d\nHigh: %d\nPress R to restart" % [score, high_score]
 		return
 
 	if player_pos.y < 10:
 		game_won = true
-		status_label.text = "YOU ESCAPED!\nPress R to restart"
+		score += 1000
+		if score > high_score:
+			high_score = score
+		status_label.text = "YOU ESCAPED!\nScore: %d\nHigh: %d\nPress R to restart" % [score, high_score]
 		return
 
-	status_label.text = "Lava Escape\n← → move, ↑ jump\nReach the top!"
+	status_label.text = "Lava Escape\n← → move, ↑ jump\nScore: %d  High: %d" % [score, high_score]
 
 
 func _input(event: InputEvent) -> void:
@@ -149,7 +159,14 @@ func can_move_to(pos: Vector2i) -> bool:
 	return mat == "" or mat == MAT_SMOKE
 
 
-func move_player(to: Vector2i) -> void:
+func move_player(to: Vector2i, is_jump: bool) -> void:
+	var dy := player_pos.y - to.y
+	if dy > 0:
+		# Reward climbing upward.
+		score += 50 * dy
+	if is_jump:
+		score += 25
+
 	world.set_cell(player_pos.x, player_pos.y, "")
 	player_pos = to
 	world.set_cell(player_pos.x, player_pos.y, MAT_PLAYER)

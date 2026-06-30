@@ -23,7 +23,7 @@ func _init() -> void:
 	for i in range(400):
 		if i % 30 == 0:
 			var target: Vector2i = instance.player_pos + Vector2i(0, -3)
-			instance.move_player(target)
+			instance.move_player(target, true)
 		if i % 5 == 0:
 			instance.spawn_lava()
 		# Force extra lava at the top for the screenshot.
