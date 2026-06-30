@@ -3,6 +3,7 @@
 
 #include "core/isimulator.h"
 #include "core/material_registry.h"
+#include "gpu/local_rendering_device.h"
 
 #include <godot_cpp/classes/rendering_device.hpp>
 #include <godot_cpp/variant/rid.hpp>
@@ -22,30 +23,28 @@ public:
     GPUSimulator() = default;
     ~GPUSimulator() override;
 
-    void init(int p_width, int p_height) override;
+    bool initialize(int p_width, int p_height, MaterialRegistry &p_registry) override;
     void update() override;
     void set_cell(int p_x, int p_y, uint16_t p_material_id) override;
     uint16_t get_cell(int p_x, int p_y) const override;
-    godot::Ref<godot::Image> get_image() override;
+    godot::Ref<godot::Image> render_image() override;
     int get_particle_count() const override;
-    bool is_valid() const { return valid; }
     void clear() override;
-    void shutdown() override;
+
+    void on_registry_changed() override;
 
     godot::PackedByteArray serialize() const override;
     bool deserialize(const godot::PackedByteArray &p_data) override;
 
-    MaterialRegistry &get_registry() { return registry; }
-    const MaterialRegistry &get_registry() const { return registry; }
-    void update_materials_buffer();
+    bool is_valid() const { return valid; }
 
 private:
     int width = 0;
     int height = 0;
     int total_cells = 0;
 
-    godot::RenderingDevice *rd = nullptr;
-    bool rd_owned = false;
+    MaterialRegistry *registry = nullptr;
+    LocalRenderingDevice rd;
 
     godot::RID shader;
     godot::RID pipeline;
@@ -66,15 +65,22 @@ private:
     bool cpu_grid_dirty = false;
     bool gpu_grid_dirty = false;
 
-    MaterialRegistry registry;
     uint32_t frame_seed = 0;
 
     void create_shader();
     void create_uniform_sets();
     void sync_cpu_from_gpu();
     void sync_gpu_from_cpu();
-    int cell_index(int p_x, int p_y) const { return p_y * width + p_x; }
+    void update_materials_buffer();
     void free_rid_safely(godot::RID &p_rid);
+    void shutdown();
+
+    int cell_index(int p_x, int p_y) const { return p_y * width + p_x; }
+
+    const MaterialRegistry &registry_ref() const {
+        static MaterialRegistry s_dummy;
+        return registry ? *registry : s_dummy;
+    }
 };
 
 } // namespace ca

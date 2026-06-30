@@ -39,6 +39,7 @@ sources += Glob("src/api/*.cpp")
 sources += Glob("src/core/*.cpp")
 sources += Glob("src/cpu/*.cpp")
 sources += Glob("src/gpu/*.cpp")
+sources += Glob("src/rendering/*.cpp")
 
 # Library output path
 if env["platform"] == "macos":

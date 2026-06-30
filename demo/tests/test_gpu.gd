@@ -8,6 +8,7 @@ const MAT_WOOD := "wood"
 func _init():
 	var world := CASWorld.new()
 	world.set_backend(CASWorld.BACKEND_GPU)
+	world.set_force_gpu(true)
 	world.init(64, 64)
 
 	register_material(world, MAT_STONE, CASMaterial.TYPE_SOLID, Color(0.5, 0.5, 0.5), 10)

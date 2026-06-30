@@ -20,14 +20,14 @@ GPUSimulator::~GPUSimulator() {
 }
 
 void GPUSimulator::free_rid_safely(godot::RID &p_rid) {
-    if (rd != nullptr && p_rid.is_valid()) {
+    if (rd.is_valid() && p_rid.is_valid()) {
         rd->free_rid(p_rid);
     }
     p_rid = godot::RID();
 }
 
 void GPUSimulator::create_shader() {
-    if (rd == nullptr) {
+    if (!rd.is_valid()) {
         return;
     }
 
@@ -58,11 +58,11 @@ void GPUSimulator::create_shader() {
 }
 
 void GPUSimulator::update_materials_buffer() {
-    if (rd == nullptr) {
+    if (!rd.is_valid()) {
         return;
     }
 
-    size_t count = registry.count();
+    size_t count = registry->count();
     if (count > MAX_MATERIALS) {
         godot::UtilityFunctions::push_warning("GPUSimulator: material count exceeds MAX_MATERIALS (", static_cast<int>(MAX_MATERIALS), "). Extra materials will be ignored by the GPU.");
         count = MAX_MATERIALS;
@@ -73,11 +73,11 @@ void GPUSimulator::update_materials_buffer() {
     memset(material_data.data(), 0, material_data.size() * 4);
     material_data[0] = static_cast<uint32_t>(count);
     for (size_t i = 0; i < count; i++) {
-        const Material *m = registry.get_material(static_cast<uint16_t>(i));
-        uint16_t burn_to_id = registry.get_material_id(m->burn_to);
-        uint16_t explode_to_id = registry.get_material_id(m->explode_to);
-        uint16_t decay_to_id = registry.get_material_id(m->decay_to);
-        uint16_t residue_id = registry.get_material_id(m->corrosion_residue);
+        const Material *m = registry->get_material(static_cast<uint16_t>(i));
+        uint16_t burn_to_id = registry->get_material_id(m->burn_to);
+        uint16_t explode_to_id = registry->get_material_id(m->explode_to);
+        uint16_t decay_to_id = registry->get_material_id(m->decay_to);
+        uint16_t residue_id = registry->get_material_id(m->corrosion_residue);
         uint32_t flags = 0u;
         if (m->flammable) flags |= 1u << 0u;
         if (m->corrosive) flags |= 1u << 1u;
@@ -110,9 +110,9 @@ void GPUSimulator::update_materials_buffer() {
                                   | ((static_cast<uint32_t>(m->velocity_y) & 0xFFFFu) << 16u);
 
         // Third uvec4: phase-change parameters.
-        uint16_t solid_id = registry.get_material_id(m->solid_form);
-        uint16_t liquid_id = registry.get_material_id(m->liquid_form);
-        uint16_t gas_id = registry.get_material_id(m->gas_form);
+        uint16_t solid_id = registry->get_material_id(m->solid_form);
+        uint16_t liquid_id = registry->get_material_id(m->liquid_form);
+        uint16_t gas_id = registry->get_material_id(m->gas_form);
         material_data[base + 8] = (static_cast<uint32_t>(static_cast<int16_t>(m->melting_point)) & 0xFFFFu)
                                   | ((static_cast<uint32_t>(static_cast<int16_t>(m->boiling_point)) & 0xFFFFu) << 16u);
         material_data[base + 9] = (static_cast<uint32_t>(static_cast<int16_t>(m->freeze_point)) & 0xFFFFu)
@@ -139,26 +139,33 @@ void GPUSimulator::update_materials_buffer() {
     }
 }
 
-void GPUSimulator::init(int p_width, int p_height) {
+void GPUSimulator::on_registry_changed() {
+    update_materials_buffer();
+    // Uniform sets reference the same materials_buf RID; only the buffer
+    // contents change, so there is no need to recreate the sets.
+}
+
+bool GPUSimulator::initialize(int p_width, int p_height, MaterialRegistry &p_registry) {
     shutdown();
 
     width = p_width;
     height = p_height;
     total_cells = width * height;
+    registry = &p_registry;
 
-    rd = godot::RenderingServer::get_singleton()->create_local_rendering_device();
-    if (rd == nullptr) {
+    godot::RenderingDevice *new_rd = godot::RenderingServer::get_singleton()->create_local_rendering_device();
+    if (new_rd == nullptr) {
         godot::UtilityFunctions::push_error("GPUSimulator: failed to create local RenderingDevice. GPU backend requires a windowed/GPU-capable Godot process.");
         shutdown();
-        return;
+        return false;
     }
-    rd_owned = true;
+    rd.reset(new_rd);
 
     create_shader();
     if (!pipeline.is_valid()) {
         godot::UtilityFunctions::push_error("GPUSimulator: failed to create compute pipeline.");
         shutdown();
-        return;
+        return false;
     }
 
     uint32_t size_bytes = static_cast<uint32_t>(total_cells * sizeof(uint32_t) * 2);
@@ -187,10 +194,11 @@ void GPUSimulator::init(int p_width, int p_height) {
     materials_buf = rd->storage_buffer_create((1 + MAX_MATERIALS * MATERIAL_UVEC4) * 4 * MATERIAL_FLOATS);
     update_materials_buffer();
     create_uniform_sets();
+    return true;
 }
 
 void GPUSimulator::create_uniform_sets() {
-    if (rd == nullptr || !shader.is_valid() || !buf_a.is_valid() || !buf_b.is_valid() || !claim_buf.is_valid() || !moved_to_buf.is_valid()) {
+    if (!rd.is_valid() || !shader.is_valid() || !buf_a.is_valid() || !buf_b.is_valid() || !claim_buf.is_valid() || !moved_to_buf.is_valid()) {
         return;
     }
 
@@ -227,7 +235,7 @@ void GPUSimulator::create_uniform_sets() {
 }
 
 void GPUSimulator::sync_gpu_from_cpu() {
-    if (rd == nullptr || total_cells == 0) {
+    if (!rd.is_valid() || total_cells == 0) {
         return;
     }
     godot::PackedByteArray data;
@@ -239,7 +247,7 @@ void GPUSimulator::sync_gpu_from_cpu() {
 }
 
 void GPUSimulator::sync_cpu_from_gpu() {
-    if (rd == nullptr || total_cells == 0) {
+    if (!rd.is_valid() || total_cells == 0) {
         return;
     }
     godot::RID current_buf = current_is_a ? buf_a : buf_b;
@@ -251,7 +259,7 @@ void GPUSimulator::sync_cpu_from_gpu() {
 }
 
 void GPUSimulator::update() {
-    if (!valid || rd == nullptr || !pipeline.is_valid()) {
+    if (!valid || !rd.is_valid() || !pipeline.is_valid()) {
         return;
     }
 
@@ -298,7 +306,7 @@ void GPUSimulator::set_cell(int p_x, int p_y, uint16_t p_material_id) {
         return;
     }
     size_t base = static_cast<size_t>(cell_index(p_x, p_y)) * 2;
-    const Material *mat = registry.get_material(p_material_id);
+    const Material *mat = registry->get_material(p_material_id);
     int16_t temp = mat ? static_cast<int16_t>(mat->temperature) : static_cast<int16_t>(0);
     uint16_t temp_u = static_cast<uint16_t>(temp);
     cpu_grid[base + 0] = static_cast<uint32_t>(p_material_id) | (static_cast<uint32_t>(temp_u) << 16u);
@@ -316,7 +324,7 @@ uint16_t GPUSimulator::get_cell(int p_x, int p_y) const {
     return static_cast<uint16_t>(cpu_grid[static_cast<size_t>(cell_index(p_x, p_y)) * 2]);
 }
 
-godot::Ref<godot::Image> GPUSimulator::get_image() {
+godot::Ref<godot::Image> GPUSimulator::render_image() {
     if (cpu_grid_dirty) {
         sync_cpu_from_gpu();
     }
@@ -324,7 +332,7 @@ godot::Ref<godot::Image> GPUSimulator::get_image() {
     godot::Ref<godot::Image> img = godot::Image::create(width, height, false, godot::Image::FORMAT_RGBA8);
     img->fill(godot::Color(0, 0, 0, 0));
 
-    const std::vector<Material> &materials = registry.get_all();
+    const std::vector<Material> &materials = registry->get_all();
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
             size_t base = static_cast<size_t>(cell_index(x, y)) * 2;
@@ -370,7 +378,7 @@ int GPUSimulator::get_particle_count() const {
 
 void GPUSimulator::clear() {
     std::fill(cpu_grid.begin(), cpu_grid.end(), 0u);
-    if (rd != nullptr) {
+    if (rd.is_valid()) {
         uint32_t size_bytes = static_cast<uint32_t>(total_cells * sizeof(uint32_t) * 2);
         godot::PackedByteArray empty_data;
         empty_data.resize(static_cast<int32_t>(size_bytes));
@@ -400,13 +408,10 @@ void GPUSimulator::shutdown() {
     free_rid_safely(pipeline);
     free_rid_safely(shader);
 
-    if (rd != nullptr && rd_owned) {
-        // The local RenderingDevice is an Object we created; release it to
-        // avoid ObjectDB leaks at shutdown.
-        godot::memdelete(rd);
-        rd = nullptr;
-    }
-    rd_owned = false;
+    // LocalRenderingDevice destructor (via reset) will memdelete the
+    // RenderingDevice object, avoiding ObjectDB leaks.
+    rd.reset();
+    registry = nullptr;
 
     width = 0;
     height = 0;
@@ -424,7 +429,7 @@ godot::PackedByteArray GPUSimulator::serialize() const {
         const_cast<GPUSimulator *>(this)->sync_cpu_from_gpu();
     }
 
-    const std::vector<Material> &materials = registry.get_all();
+    const std::vector<Material> &materials = registry->get_all();
     godot::PackedByteArray data;
 
     size_t header_size = 4 + 4 + 4 + 4 + 4;
@@ -545,7 +550,7 @@ bool GPUSimulator::deserialize(const godot::PackedByteArray &p_data) {
         }
         std::string name(reinterpret_cast<const char *>(ptr + offset), name_len);
         offset += name_len;
-        id_mapping[i] = registry.get_material_id(name);
+        id_mapping[i] = registry->get_material_id(name);
     }
 
     size_t expected_cell_size = static_cast<size_t>(width * height) * 5;

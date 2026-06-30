@@ -1,7 +1,10 @@
 #include "cas_world.h"
 #include "cas_material.h"
 
+#include "core/backend_factory.h"
+
 #include <godot_cpp/core/class_db.hpp>
+#include <algorithm>
 #include <godot_cpp/variant/utility_functions.hpp>
 #include <godot_cpp/classes/file_access.hpp>
 
@@ -11,19 +14,19 @@ CASWorld::CASWorld() {
 }
 
 CASWorld::~CASWorld() {
-	if (simulator != nullptr) {
-		simulator->shutdown();
-		delete simulator;
-		simulator = nullptr;
-	}
-	if (texture.is_valid()) {
-		texture.unref();
-	}
+	// unique_ptr destructor calls ISimulator::~ISimulator, which releases
+	// all backend resources (RIDs, local RenderingDevice, thread pool, etc.).
 }
 
 void CASWorld::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_backend", "backend"), &CASWorld::set_backend);
 	ClassDB::bind_method(D_METHOD("get_backend"), &CASWorld::get_backend);
+
+	ClassDB::bind_method(D_METHOD("set_force_gpu", "force"), &CASWorld::set_force_gpu);
+	ClassDB::bind_method(D_METHOD("get_force_gpu"), &CASWorld::get_force_gpu);
+
+	ClassDB::bind_method(D_METHOD("set_gpu_fallback_threshold", "threshold"), &CASWorld::set_gpu_fallback_threshold);
+	ClassDB::bind_method(D_METHOD("get_gpu_fallback_threshold"), &CASWorld::get_gpu_fallback_threshold);
 
 	ClassDB::bind_method(D_METHOD("set_world_size", "width", "height"), &CASWorld::set_world_size);
 	ClassDB::bind_method(D_METHOD("get_world_size"), &CASWorld::get_world_size);
@@ -46,6 +49,8 @@ void CASWorld::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("load_world", "path"), &CASWorld::load_world);
 
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "backend", PROPERTY_HINT_ENUM, "CPU,GPU"), "set_backend", "get_backend");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "force_gpu"), "set_force_gpu", "get_force_gpu");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "gpu_fallback_threshold"), "set_gpu_fallback_threshold", "get_gpu_fallback_threshold");
 
 	BIND_ENUM_CONSTANT(BACKEND_CPU);
 	BIND_ENUM_CONSTANT(BACKEND_GPU);
@@ -65,6 +70,22 @@ int CASWorld::get_backend() const {
 	return backend;
 }
 
+void CASWorld::set_force_gpu(bool p_force) {
+	backend_policy.force_gpu = p_force;
+}
+
+bool CASWorld::get_force_gpu() const {
+	return backend_policy.force_gpu;
+}
+
+void CASWorld::set_gpu_fallback_threshold(int p_threshold) {
+	backend_policy.gpu_fallback_cell_threshold = std::max(0, p_threshold);
+}
+
+int CASWorld::get_gpu_fallback_threshold() const {
+	return backend_policy.gpu_fallback_cell_threshold;
+}
+
 void CASWorld::set_world_size(int p_width, int p_height) {
 	width = p_width;
 	height = p_height;
@@ -74,46 +95,50 @@ Vector2i CASWorld::get_world_size() const {
 	return Vector2i(width, height);
 }
 
+bool CASWorld::_create_simulator() {
+	int effective_backend = ca::BackendFactory::select_backend(backend, width * height, backend_policy);
+
+	simulator = ca::BackendFactory::create(effective_backend);
+	if (simulator == nullptr) {
+		return false;
+	}
+
+	if (!simulator->initialize(width, height, registry)) {
+		simulator.reset();
+		return false;
+	}
+
+	// If we requested GPU but the policy/factory selected CPU, keep the
+	// requested enum so the user sees the actual active backend.
+	backend = effective_backend;
+	return true;
+}
+
 void CASWorld::init(int p_width, int p_height) {
 	width = p_width;
 	height = p_height;
 
-	if (simulator != nullptr) {
-		simulator->shutdown();
-		delete simulator;
-		simulator = nullptr;
-	}
+	// unique_ptr reset automatically shuts down and deletes the old simulator.
+	simulator.reset();
+	renderer.reset();
 
-	if (backend == BACKEND_GPU) {
-		simulator = new ca::GPUSimulator();
-	} else {
-		simulator = new ca::CPUSimulator();
-	}
-
-	simulator->init(width, height);
-
-	if (backend == BACKEND_GPU) {
-		ca::GPUSimulator *gpu_sim = dynamic_cast<ca::GPUSimulator *>(simulator);
-		if (gpu_sim == nullptr || !gpu_sim->is_valid()) {
-			UtilityFunctions::push_error("CASWorld: GPU backend initialization failed. Falling back to CPU.");
-			simulator->shutdown();
-			delete simulator;
-			simulator = new ca::CPUSimulator();
-			simulator->init(width, height);
+	if (!_create_simulator()) {
+		if (backend == BACKEND_GPU) {
+			UtilityFunctions::push_warning("CASWorld: GPU simulator failed to initialize; falling back to CPU.");
 			backend = BACKEND_CPU;
-		} else if (width * height <= 64 * 64) {
-			// GPU fixed overhead (compute list, barriers, submit/sync) is not
-			// amortized on very small grids; use CPU instead.
-			UtilityFunctions::print("CASWorld: grid <= 64x64, GPU overhead outweighs benefit; falling back to CPU.");
-			simulator->shutdown();
-			delete simulator;
-			simulator = new ca::CPUSimulator();
-			simulator->init(width, height);
-			backend = BACKEND_CPU;
+			if (!_create_simulator()) {
+				UtilityFunctions::push_error("CASWorld: failed to initialize CPU fallback simulator.");
+				initialized = false;
+				return;
+			}
+		} else {
+			UtilityFunctions::push_error("CASWorld: failed to initialize simulator.");
+			initialized = false;
+			return;
 		}
 	}
 
-	image_dirty = true;
+	renderer.mark_dirty();
 	initialized = true;
 	UtilityFunctions::print("CASWorld initialized: ", width, "x", height, " backend: ", get_backend_name());
 }
@@ -123,7 +148,7 @@ void CASWorld::clear() {
 		return;
 	}
 	simulator->clear();
-	image_dirty = true;
+	renderer.mark_dirty();
 }
 
 void CASWorld::update() {
@@ -131,17 +156,11 @@ void CASWorld::update() {
 		return;
 	}
 	simulator->update();
-	image_dirty = true;
+	renderer.mark_dirty();
 	// If a texture has already been created (e.g. by get_texture()), keep it
 	// in sync so callers that only assign the texture once still see updates.
-	if (texture.is_valid()) {
-		if (cached_image.is_null() || image_dirty) {
-			cached_image = simulator->get_image();
-			image_dirty = false;
-		}
-		if (cached_image.is_valid()) {
-			texture->update(cached_image);
-		}
+	if (renderer.has_texture()) {
+		renderer.get_texture(*simulator);
 	}
 }
 
@@ -149,20 +168,8 @@ String CASWorld::get_backend_name() const {
 	return backend == BACKEND_CPU ? "CPU" : "GPU";
 }
 
-static ca::MaterialRegistry *get_registry(ca::ISimulator *p_sim) {
-	ca::CPUSimulator *cpu_sim = dynamic_cast<ca::CPUSimulator *>(p_sim);
-	if (cpu_sim != nullptr) {
-		return &cpu_sim->get_registry();
-	}
-	ca::GPUSimulator *gpu_sim = dynamic_cast<ca::GPUSimulator *>(p_sim);
-	if (gpu_sim != nullptr) {
-		return &gpu_sim->get_registry();
-	}
-	return nullptr;
-}
-
 void CASWorld::register_material(const Ref<CASMaterial> &p_material) {
-	if (p_material.is_null() || simulator == nullptr) {
+	if (p_material.is_null()) {
 		return;
 	}
 	ca::Material mat;
@@ -192,15 +199,9 @@ void CASWorld::register_material(const Ref<CASMaterial> &p_material) {
 	mat.gas_form = std::string(p_material->get_gas_form().utf8().get_data());
 	mat.thermal_conductivity = p_material->get_thermal_conductivity();
 
-	ca::MaterialRegistry *reg = get_registry(simulator);
-	if (reg == nullptr) {
-		return;
-	}
-	uint16_t id = reg->register_material(mat);
-
-	ca::GPUSimulator *gpu_sim = dynamic_cast<ca::GPUSimulator *>(simulator);
-	if (gpu_sim != nullptr) {
-		gpu_sim->update_materials_buffer();
+	uint16_t id = registry.register_material(mat);
+	if (simulator != nullptr) {
+		simulator->on_registry_changed();
 	}
 
 	UtilityFunctions::print("Registered material: ", String(mat.name.c_str()), " id=", id);
@@ -210,25 +211,20 @@ void CASWorld::set_cell(int p_x, int p_y, const String &p_material_name) {
 	if (simulator == nullptr) {
 		return;
 	}
-	ca::MaterialRegistry *reg = get_registry(simulator);
-	if (reg == nullptr) {
-		return;
-	}
-	uint16_t id = reg->get_material_id(std::string(p_material_name.utf8().get_data()));
+	uint16_t id = registry.get_material_id(std::string(p_material_name.utf8().get_data()));
 	simulator->set_cell(p_x, p_y, id);
-	image_dirty = true;
+	renderer.mark_dirty();
 }
 
 String CASWorld::get_cell(int p_x, int p_y) const {
 	if (simulator == nullptr) {
 		return "";
 	}
-	ca::MaterialRegistry *reg = get_registry(const_cast<CASWorld *>(this)->simulator);
-	if (reg == nullptr) {
+	uint16_t id = simulator->get_cell(p_x, p_y);
+	const ca::Material *mat = registry.get_material(id);
+	if (mat == nullptr) {
 		return "";
 	}
-	uint16_t id = simulator->get_cell(p_x, p_y);
-	const ca::Material *mat = reg->get_material(id);
 	return String(mat->name.c_str());
 }
 
@@ -236,38 +232,16 @@ Ref<Image> CASWorld::get_image() const {
 	if (simulator == nullptr) {
 		return Ref<Image>();
 	}
-	if (image_dirty) {
-		cached_image = simulator->get_image();
-		image_dirty = false;
-	}
-	if (cached_image.is_null()) {
-		return Ref<Image>();
-	}
-	// Return a duplicate so callers can freely resize/modify the image
-	// without corrupting the internal cache or the texture.
-	return cached_image->duplicate();
+	// WorldRenderer returns a duplicate so callers can freely resize/modify
+	// the image without corrupting the internal cache or texture.
+	return const_cast<CASWorld *>(this)->renderer.get_image_snapshot(*simulator);
 }
 
 Ref<Texture2D> CASWorld::get_texture() {
 	if (simulator == nullptr) {
 		return Ref<Texture2D>();
 	}
-	// Refresh the cached image if needed, but use the internal cache directly
-	// for texture creation/updates. Callers can safely modify the Image returned
-	// by get_image() without affecting this texture.
-	if (cached_image.is_null() || image_dirty) {
-		cached_image = simulator->get_image();
-		image_dirty = false;
-	}
-	if (cached_image.is_null()) {
-		return Ref<Texture2D>();
-	}
-	if (texture.is_null()) {
-		texture = godot::ImageTexture::create_from_image(cached_image);
-	} else {
-		texture->update(cached_image);
-	}
-	return texture;
+	return renderer.get_texture(*simulator);
 }
 
 int CASWorld::get_particle_count() const {
@@ -279,14 +253,7 @@ int CASWorld::get_particle_count() const {
 
 PackedStringArray CASWorld::get_registered_material_names() const {
 	PackedStringArray names;
-	if (simulator == nullptr) {
-		return names;
-	}
-	ca::MaterialRegistry *reg = get_registry(const_cast<CASWorld *>(this)->simulator);
-	if (reg == nullptr) {
-		return names;
-	}
-	const std::vector<ca::Material> &materials = reg->get_all();
+	const std::vector<ca::Material> &materials = registry.get_all();
 	for (const ca::Material &m : materials) {
 		if (!m.name.empty()) {
 			names.append(String(m.name.c_str()));
@@ -323,7 +290,6 @@ Error CASWorld::load_world(const String &p_path) {
 	if (!ok) {
 		return ERR_INVALID_DATA;
 	}
-	// Force image refresh on next access.
-	image_dirty = true;
+	renderer.mark_dirty();
 	return OK;
 }

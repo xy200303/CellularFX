@@ -22,14 +22,16 @@ CPUSimulator::~CPUSimulator() {
     shutdown();
 }
 
-void CPUSimulator::init(int p_width, int p_height) {
+bool CPUSimulator::initialize(int p_width, int p_height, MaterialRegistry &p_registry) {
     width = p_width;
     height = p_height;
+    registry = &p_registry;
     grid.resize(width, height);
     image = godot::Image::create(width, height, false, godot::Image::FORMAT_RGBA8);
     image->fill(godot::Color(0, 0, 0, 0));
     reset_active_region();
     thread_pool = std::make_unique<ThreadPool>(static_cast<size_t>(thread_count));
+    return true;
 }
 
 void CPUSimulator::reset_active_region() {
@@ -91,8 +93,8 @@ bool CPUSimulator::can_move_to(int p_x, int p_y, uint16_t p_current_mat) const {
     if (target.material_id == p_current_mat) {
         return false;
     }
-    const Material *target_mat = registry.get_material(target.material_id);
-    const Material *current_mat = registry.get_material(p_current_mat);
+    const Material *target_mat = registry->get_material(target.material_id);
+    const Material *current_mat = registry->get_material(p_current_mat);
     if (current_mat->type == MaterialType::LIQUID && target_mat->type == MaterialType::LIQUID) {
         return current_mat->density > target_mat->density;
     }
@@ -112,7 +114,7 @@ uint16_t CPUSimulator::resolve_material_name(const std::string &p_name) const {
     if (p_name.empty()) {
         return 0;
     }
-    const Material *m = registry.get_material(p_name);
+    const Material *m = registry->get_material(p_name);
     return m ? m->id : 0;
 }
 
@@ -128,7 +130,7 @@ bool CPUSimulator::is_hot_neighbor(int p_x, int p_y) const {
                 continue;
             }
             uint16_t nid = grid.cell_current(nx, ny).material_id;
-            const Material *nm = registry.get_material(nid);
+            const Material *nm = registry->get_material(nid);
             if (nm->type == MaterialType::GAS && nm->lifetime > 0) {
                 return true;
             }
@@ -143,7 +145,7 @@ void CPUSimulator::apply_reactions(int p_x, int p_y) {
     if (mat_id == 0) {
         return;
     }
-    const Material *mat = registry.get_material(mat_id);
+    const Material *mat = registry->get_material(mat_id);
 
     // Explosion: explosive material adjacent to fire/heat detonates.
     if (mat->explosive && !mat->explode_to.empty() && is_hot_neighbor(p_x, p_y)) {
@@ -156,7 +158,7 @@ void CPUSimulator::apply_reactions(int p_x, int p_y) {
                     continue;
                 }
                 Cell &neighbor = grid.cell_next(nx, ny);
-                const Material *nm = registry.get_material(neighbor.material_id);
+                const Material *nm = registry->get_material(neighbor.material_id);
                 if (nm != nullptr && nm->explosive) {
                     continue; // let the other explosive detonate on its own
                 }
@@ -195,7 +197,7 @@ void CPUSimulator::apply_reactions(int p_x, int p_y) {
             if (neighbor.material_id == 0 || neighbor.material_id == mat_id) {
                 continue;
             }
-            const Material *nm = registry.get_material(neighbor.material_id);
+            const Material *nm = registry->get_material(neighbor.material_id);
             if (nm->corrosive) {
                 continue; // corrosives do not eat each other
             }
@@ -248,7 +250,7 @@ void CPUSimulator::thermal_compute_band(int p_min_x, int p_max_x, int p_min_y, i
             if (next.material_id == 0) {
                 continue;
             }
-            const Material *mat = registry.get_material(next.material_id);
+            const Material *mat = registry->get_material(next.material_id);
             int conductivity = std::clamp(mat->thermal_conductivity, 0, 100);
             int32_t sum = next.temperature;
             int count = 1;
@@ -285,7 +287,7 @@ void CPUSimulator::thermal_compute_band(int p_min_x, int p_max_x, int p_min_y, i
             int idx = (y - p_min_y) * band_w + (x - p_min_x);
             next.temperature = new_temperatures[idx];
 
-            const Material *mat = registry.get_material(next.material_id);
+            const Material *mat = registry->get_material(next.material_id);
             uint16_t new_mat_id = next.material_id;
             if (next.temperature > mat->boiling_point && !mat->gas_form.empty()) {
                 new_mat_id = resolve_material_name(mat->gas_form);
@@ -297,7 +299,7 @@ void CPUSimulator::thermal_compute_band(int p_min_x, int p_max_x, int p_min_y, i
             if (new_mat_id != next.material_id && new_mat_id != 0) {
                 next.material_id = new_mat_id;
                 next.flags = 0;
-                const Material *new_mat = registry.get_material(new_mat_id);
+                const Material *new_mat = registry->get_material(new_mat_id);
                 if (new_mat != nullptr) {
                     next.temperature = static_cast<int16_t>(new_mat->temperature);
                 }
@@ -354,7 +356,7 @@ void CPUSimulator::update() {
                 continue;
             }
 
-            const Material *mat = registry.get_material(mat_id);
+            const Material *mat = registry->get_material(mat_id);
 
             // Sleeping movable particles are skipped most frames and woken up periodically.
             if (!wake_sleeping && cell.sleeping() && mat->type != MaterialType::SOLID) {
@@ -505,7 +507,7 @@ void CPUSimulator::set_cell(int p_x, int p_y, uint16_t p_material_id) {
     }
     grid.cell_current(p_x, p_y).material_id = p_material_id;
     grid.cell_current(p_x, p_y).flags = 0;
-    const Material *mat = registry.get_material(p_material_id);
+    const Material *mat = registry->get_material(p_material_id);
     grid.cell_current(p_x, p_y).temperature = mat ? static_cast<int16_t>(mat->temperature) : static_cast<int16_t>(0);
     if (p_material_id != 0) {
         expand_active_region(p_x, p_y);
@@ -519,10 +521,10 @@ uint16_t CPUSimulator::get_cell(int p_x, int p_y) const {
     return grid.cell_current(p_x, p_y).material_id;
 }
 
-godot::Ref<godot::Image> CPUSimulator::get_image() {
+godot::Ref<godot::Image> CPUSimulator::render_image() {
     image->fill(godot::Color(0, 0, 0, 0));
 
-    const std::vector<Material> &materials = registry.get_all();
+    const std::vector<Material> &materials = registry->get_all();
     int w = image->get_width();
     int h = image->get_height();
 
@@ -604,11 +606,12 @@ void CPUSimulator::shutdown() {
     image.unref();
     thread_pool.reset();
     reset_active_region();
+    registry = nullptr;
 }
 
 godot::PackedByteArray CPUSimulator::serialize() const {
     godot::PackedByteArray data;
-    const std::vector<Material> &materials = registry.get_all();
+    const std::vector<Material> &materials = registry->get_all();
 
     // Header: magic, version, width, height, material count.
     size_t header_size = 4 + 4 + 4 + 4 + 4;
@@ -725,7 +728,7 @@ bool CPUSimulator::deserialize(const godot::PackedByteArray &p_data) {
         }
         std::string name(reinterpret_cast<const char *>(ptr + offset), name_len);
         offset += name_len;
-        id_mapping[i] = registry.get_material_id(name);
+        id_mapping[i] = registry->get_material_id(name);
     }
 
     size_t expected_cell_size = static_cast<size_t>(width * height) * 5;
