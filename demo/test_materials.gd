@@ -167,8 +167,10 @@ func _init():
 		print("All material tests passed.")
 	else:
 		print("Some material tests failed.")
+		world.free()
 		quit(1)
 
+	world.free()
 	quit(0)
 
 func register_material(world: CASWorld, name: String, type: int, color: Color, density: int, lifetime: int = 0, decay_to: String = "", flammable: bool = false, burn_to: String = "", corrosive: bool = false, corrosion_residue: String = "", corrosion_chance: float = 0.1, explosive: bool = false, explode_to: String = "", temperature: int = 20, thermal_conductivity: int = 10) -> void:

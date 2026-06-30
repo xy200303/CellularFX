@@ -49,6 +49,7 @@ func _init():
 		push_error("GPU Test 3 failed: water did not reach bottom")
 
 	print("GPU tests finished. Quitting.")
+	world.free()
 	quit(0)
 
 func register_material(world: CASWorld, name: String, type: int, color: Color, density: int):

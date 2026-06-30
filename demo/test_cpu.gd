@@ -64,8 +64,10 @@ func _init():
 		print("All CPU backend tests passed.")
 	else:
 		print("Some CPU backend tests failed.")
+		world.free()
 		quit(1)
 
+	world.free()
 	quit(0)
 
 func register_material(world: CASWorld, name: String, type: int, color: Color, density: int):

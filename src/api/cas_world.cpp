@@ -101,6 +101,15 @@ void CASWorld::init(int p_width, int p_height) {
 			simulator = new ca::CPUSimulator();
 			simulator->init(width, height);
 			backend = BACKEND_CPU;
+		} else if (width * height <= 64 * 64) {
+			// GPU fixed overhead (compute list, barriers, submit/sync) is not
+			// amortized on very small grids; use CPU instead.
+			UtilityFunctions::print("CASWorld: grid <= 64x64, GPU overhead outweighs benefit; falling back to CPU.");
+			simulator->shutdown();
+			delete simulator;
+			simulator = new ca::CPUSimulator();
+			simulator->init(width, height);
+			backend = BACKEND_CPU;
 		}
 	}
 
@@ -123,6 +132,14 @@ void CASWorld::update() {
 	}
 	simulator->update();
 	image_dirty = true;
+	// If a texture has already been created (e.g. by get_texture()), keep it
+	// in sync so callers that only assign the texture once still see updates.
+	if (texture.is_valid()) {
+		godot::Ref<godot::Image> img = get_image();
+		if (img.is_valid()) {
+			texture->update(img);
+		}
+	}
 }
 
 String CASWorld::get_backend_name() const {

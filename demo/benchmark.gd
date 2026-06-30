@@ -60,6 +60,7 @@ func _run_benchmark(size: Vector2i, frames: int) -> void:
 	var fps := 1000.0 / avg_ms
 
 	print("Size %dx%d | particles %d | total %.2f ms | avg %.3f ms/frame | %.1f fps" % [size.x, size.y, count, total_ms, avg_ms, fps])
+	world.free()
 
 func register_material(world: CASWorld, name: String, type: int, color: Color, density: int, lifetime: int = 0, decay_to: String = "", flammable: bool = false, burn_to: String = "", corrosive: bool = false, corrosion_residue: String = "", corrosion_chance: float = 0.1, explosive: bool = false, explode_to: String = "", temperature: int = 20, thermal_conductivity: int = 10) -> void:
 	var mat := CASMaterial.new()

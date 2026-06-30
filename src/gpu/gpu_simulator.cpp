@@ -1,6 +1,7 @@
 #include "gpu_simulator.h"
 
 #include <godot_cpp/classes/rendering_server.hpp>
+#include <godot_cpp/core/memory.hpp>
 #include <godot_cpp/classes/rd_shader_file.hpp>
 #include <godot_cpp/classes/rd_shader_spirv.hpp>
 #include <godot_cpp/classes/rd_uniform.hpp>
@@ -400,7 +401,9 @@ void GPUSimulator::shutdown() {
     free_rid_safely(shader);
 
     if (rd != nullptr && rd_owned) {
-        // RenderingDevice local device does not need explicit free in this API.
+        // The local RenderingDevice is an Object we created; release it to
+        // avoid ObjectDB leaks at shutdown.
+        godot::memdelete(rd);
         rd = nullptr;
     }
     rd_owned = false;

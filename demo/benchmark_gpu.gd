@@ -57,6 +57,7 @@ func bench_backend(size: int, label: String, backend: int):
 	var fps := 1000.0 / avg_ms
 
 	print("Size %dx%d | backend %-3s | particles %d | total %.2f ms | avg %.3f ms/frame | %.1f fps" % [size, size, label, particles, total_ms, avg_ms, fps])
+	world.free()
 
 func register_material(world: CASWorld, name: String, type: int, color: Color, density: int):
 	var mat := CASMaterial.new()

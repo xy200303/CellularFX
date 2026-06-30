@@ -12,6 +12,24 @@ if not os.path.isfile(sconstruct_path):
     print("Set GODOT_CPP_PATH to a valid godot-cpp checkout, or keep it at ./godot-cpp.")
     sys.exit(1)
 
+# If the heavy godot-cpp tree lives inside the Godot project, hide it from the
+# editor file-system scan so opening the project does not crawl thousands of
+# files. This is a no-op when GODOT_CPP_PATH points outside the project.
+if not os.path.isabs(godot_cpp_path) and not godot_cpp_path.startswith(".."):
+    gdignore = os.path.join(godot_cpp_path, ".gdignore")
+    if not os.path.exists(gdignore):
+        with open(gdignore, "w"):
+            pass
+
+# Hide distribution/temp directories from the editor scan as well.
+for hide_dir in ["dist", "tmp_source"]:
+    if not os.path.isdir(hide_dir):
+        os.makedirs(hide_dir, exist_ok=True)
+    gdignore = os.path.join(hide_dir, ".gdignore")
+    if not os.path.exists(gdignore):
+        with open(gdignore, "w"):
+            pass
+
 env = SConscript(sconstruct_path)
 
 # Add source files

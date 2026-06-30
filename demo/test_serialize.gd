@@ -22,34 +22,42 @@ func _init():
 	var err := world.save_world(save_path)
 	if err != OK:
 		push_error("save_world failed with error " + str(err))
+		world.free()
 		quit(1)
 
 	world.clear()
 	if world.get_particle_count() != 0:
 		push_error("clear did not empty world")
+		world.free()
 		quit(1)
 
 	err = world.load_world(save_path)
 	if err != OK:
 		push_error("load_world failed with error " + str(err))
+		world.free()
 		quit(1)
 
 	var after := world.get_particle_count()
 	if after != before:
 		push_error("particle count mismatch: before=" + str(before) + " after=" + str(after))
+		world.free()
 		quit(1)
 
 	if world.get_cell(32, 50) != MAT_SAND:
 		push_error("sand not restored at (32,50): " + world.get_cell(32, 50))
+		world.free()
 		quit(1)
 	if world.get_cell(33, 50) != MAT_WATER:
 		push_error("water not restored at (33,50): " + world.get_cell(33, 50))
+		world.free()
 		quit(1)
 	if world.get_cell(34, 50) != MAT_STONE:
 		push_error("stone not restored at (34,50): " + world.get_cell(34, 50))
+		world.free()
 		quit(1)
 
 	print("Serialize test passed: saved ", before, " particles and restored ", after)
+	world.free()
 	quit(0)
 
 func register_material(world: CASWorld, name: String, type: int, color: Color, density: int) -> void:
