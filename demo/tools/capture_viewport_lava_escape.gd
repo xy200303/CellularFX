@@ -10,7 +10,7 @@ func _init() -> void:
 	var instance: Node = scene.instantiate()
 	root.add_child(instance)
 
-	# Wait for _ready() to initialize the world.
+	await process_frame
 	await process_frame
 
 	var world := instance.get_node("CASWorld") as CASWorld
@@ -19,33 +19,24 @@ func _init() -> void:
 		quit(1)
 		return
 
-	# Move the player up periodically and spawn extra lava for a dramatic screenshot.
-	for i in range(400):
+	for i in range(120):
 		if i % 30 == 0:
 			var target: Vector2i = instance.player_pos + Vector2i(0, -3)
 			instance.move_player(target, true)
 		if i % 5 == 0:
 			instance.spawn_lava()
-		# Force extra lava at the top for the screenshot.
 		if i % 3 == 0:
 			for x in range(35, 61):
 				if randf() < 0.3:
 					world.set_cell(x, 2, "lava")
 		await process_frame
 
-	print("player pos:", instance.player_pos)
-	print("player cell:", world.get_cell(instance.player_pos.x, instance.player_pos.y))
-	print("cell at (50,2):", world.get_cell(50, 2))
-	print("cell at (50,10):", world.get_cell(50, 10))
-	print("cell at (50,50):", world.get_cell(50, 50))
-	print("particle count:", world.get_particle_count())
-
-	var img := world.get_image()
+	var img := root.get_texture().get_image()
 	img.resize(512, 512, Image.INTERPOLATE_NEAREST)
-	var err := img.save_png("res://screenshots/lava_escape.png")
+	var err := img.save_png("res://screenshots/lava_escape_viewport.png")
 	if err == OK:
-		print("Lava escape screenshot saved")
+		print("Viewport screenshot saved")
 	else:
-		push_error("Failed to save screenshot")
+		push_error("Failed to save viewport screenshot")
 
 	quit(0)

@@ -10,4 +10,4 @@ script = ExtResource("1_dby6u")
 [node name="TextureRect" type="TextureRect" parent="."]
 offset_right = 1024.0
 offset_bottom = 1365.0
-stretch_mode = 1
+stretch_mode = 0

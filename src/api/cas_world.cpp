@@ -135,9 +135,12 @@ void CASWorld::update() {
 	// If a texture has already been created (e.g. by get_texture()), keep it
 	// in sync so callers that only assign the texture once still see updates.
 	if (texture.is_valid()) {
-		godot::Ref<godot::Image> img = get_image();
-		if (img.is_valid()) {
-			texture->update(img);
+		if (cached_image.is_null() || image_dirty) {
+			cached_image = simulator->get_image();
+			image_dirty = false;
+		}
+		if (cached_image.is_valid()) {
+			texture->update(cached_image);
 		}
 	}
 }
@@ -249,14 +252,20 @@ Ref<Texture2D> CASWorld::get_texture() {
 	if (simulator == nullptr) {
 		return Ref<Texture2D>();
 	}
-	godot::Ref<godot::Image> img = get_image();
-	if (img.is_null()) {
+	// Refresh the cached image if needed, but use the internal cache directly
+	// for texture creation/updates. Callers can safely modify the Image returned
+	// by get_image() without affecting this texture.
+	if (cached_image.is_null() || image_dirty) {
+		cached_image = simulator->get_image();
+		image_dirty = false;
+	}
+	if (cached_image.is_null()) {
 		return Ref<Texture2D>();
 	}
 	if (texture.is_null()) {
-		texture = godot::ImageTexture::create_from_image(img);
+		texture = godot::ImageTexture::create_from_image(cached_image);
 	} else {
-		texture->update(img);
+		texture->update(cached_image);
 	}
 	return texture;
 }
