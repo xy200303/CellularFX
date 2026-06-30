@@ -24,7 +24,7 @@
 - **编辑器友好**：可直接在 Godot 编辑器中使用；材料可在 Inspector 中配置。
 - **编辑器 Dock**：笔刷工具、材料面板、实时预览、播放/步进/清空控制。
 - **温度可视化**：单元格颜色会随自身温度向热/冷色调插值。
-- **性能基准**：`demo/benchmark.gd` 测量 CPU 性能；`demo/benchmark_gpu.gd` 在窗口化环境下对比 CPU/GPU。
+- **性能基准**：`demo/benchmarks/benchmark.gd` 测量 CPU 性能；`demo/benchmarks/benchmark_gpu.gd` 在窗口化环境下对比 CPU/GPU。
 
 ## 截图
 
@@ -46,7 +46,7 @@
 
 ### CPU 后端（headless）
 
-运行命令：`godot --headless --script demo/benchmark.gd`
+运行命令：`godot --headless --script demo/benchmarks/benchmark.gd`
 
 | 尺寸 | 粒子数 | ms/帧 | FPS |
 |------|--------|-------|-----|
@@ -57,7 +57,7 @@
 
 ### GPU vs CPU（窗口化）
 
-运行命令：`godot --script demo/benchmark_gpu.gd`
+运行命令：`godot --script demo/benchmarks/benchmark_gpu.gd`
 
 | 尺寸 | 后端 | 粒子数 | ms/帧 | FPS |
 |------|------|--------|-------|-----|

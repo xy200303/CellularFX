@@ -1,7 +1,7 @@
 extends SceneTree
 
 func _init() -> void:
-	var scene := load("res://demo/game_lava_escape.tscn")
+	var scene := load("res://demo/games/lava_escape/game_lava_escape.tscn")
 	if scene == null:
 		push_error("Failed to load game_lava_escape.tscn")
 		quit(1)

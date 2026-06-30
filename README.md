@@ -24,7 +24,7 @@ A high-performance **cellular automata / falling-sand engine** for Godot 4, writ
 - **Editor-friendly**: works directly inside the Godot editor; materials can be configured in the Inspector.
 - **Editor Dock**: brush tools, material palette, real-time preview, Play/Step/Clear controls.
 - **Temperature visualization**: cell colors blend towards hot/cold tints based on per-cell temperature.
-- **Benchmark**: `demo/benchmark.gd` measures CPU performance across grid sizes; `demo/benchmark_gpu.gd` compares CPU and GPU in a window.
+- **Benchmark**: `demo/benchmarks/benchmark.gd` measures CPU performance across grid sizes; `demo/benchmarks/benchmark_gpu.gd` compares CPU and GPU in a window.
 
 ## Screenshots
 
@@ -46,7 +46,7 @@ Measured on an AMD Ryzen laptop with integrated Radeon graphics, Windows 11, God
 
 ### CPU backend (headless)
 
-Run with `godot --headless --script demo/benchmark.gd`.
+Run with `godot --headless --script demo/benchmarks/benchmark.gd`.
 
 | Size | Particles | ms/frame | FPS |
 |------|-----------|----------|-----|
@@ -57,7 +57,7 @@ Run with `godot --headless --script demo/benchmark.gd`.
 
 ### GPU vs CPU (windowed)
 
-Run with `godot --script demo/benchmark_gpu.gd`.
+Run with `godot --script demo/benchmarks/benchmark_gpu.gd`.
 
 | Size | Backend | Particles | ms/frame | FPS |
 |------|---------|-----------|----------|-----|
