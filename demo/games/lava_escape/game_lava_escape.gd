@@ -12,6 +12,9 @@ const MAT_SMOKE := "smoke"
 const WORLD_W := 96
 const WORLD_H := 128
 
+# Player is a small blob instead of a single pixel so it is visible on screen.
+const PLAYER_SIZE := Vector2i(2, 2)
+
 var player_pos := Vector2i(48, 120)
 var move_timer := 0.0
 var move_delay := 0.08
@@ -29,7 +32,15 @@ func _ready() -> void:
 	world.init(WORLD_W, WORLD_H)
 
 	register_material(MAT_STONE, CASMaterial.TYPE_SOLID, Color(0.45, 0.45, 0.48), 100)
-	register_material(MAT_PLAYER, CASMaterial.TYPE_SOLID, Color(0.2, 0.8, 0.4), 100)
+	# Make the player glow so it stands out against the lava/platforms.
+	var player_mat := CASMaterial.new()
+	player_mat.material_name = MAT_PLAYER
+	player_mat.material_type = CASMaterial.TYPE_SOLID
+	player_mat.material_color = Color(0.1, 0.95, 0.25)
+	player_mat.density = 100
+	player_mat.emit_light = true
+	player_mat.glow_color = Color(0.2, 1.0, 0.4)
+	world.register_material(player_mat)
 	register_material(MAT_LAVA, CASMaterial.TYPE_LIQUID, Color(1.0, 0.25, 0.05), 8,
 		0, "", false, "", false, "", 0.0, false, "", 1200, 50)
 	register_material(MAT_SMOKE, CASMaterial.TYPE_GAS, Color(0.35, 0.35, 0.35), 0, 80, "")
@@ -149,27 +160,37 @@ func build_level() -> void:
 
 func set_player(pos: Vector2i) -> void:
 	player_pos = pos
-	world.set_cell(pos.x, pos.y, MAT_PLAYER)
+	for dx in range(PLAYER_SIZE.x):
+		for dy in range(PLAYER_SIZE.y):
+			world.set_cell(pos.x + dx, pos.y + dy, MAT_PLAYER)
 
 
+# Check whether the whole player footprint fits at the given top-left corner.
 func can_move_to(pos: Vector2i) -> bool:
-	if pos.x < 1 or pos.x >= WORLD_W - 1 or pos.y < 0 or pos.y >= WORLD_H:
+	if pos.x < 1 or pos.x + PLAYER_SIZE.x > WORLD_W - 1 or pos.y < 0 or pos.y + PLAYER_SIZE.y > WORLD_H:
 		return false
-	var mat := world.get_cell(pos.x, pos.y)
-	return mat == "" or mat == MAT_SMOKE
+	for dx in range(PLAYER_SIZE.x):
+		for dy in range(PLAYER_SIZE.y):
+			var mat := world.get_cell(pos.x + dx, pos.y + dy)
+			if mat != "" and mat != MAT_SMOKE and mat != MAT_PLAYER:
+				return false
+	return true
 
 
 func move_player(to: Vector2i, is_jump: bool) -> void:
-	var dy := player_pos.y - to.y
-	if dy > 0:
+	var climb := player_pos.y - to.y
+	if climb > 0:
 		# Reward climbing upward.
-		score += 50 * dy
+		score += 50 * climb
 	if is_jump:
 		score += 25
 
-	world.set_cell(player_pos.x, player_pos.y, "")
+	# Clear old footprint.
+	for dx in range(PLAYER_SIZE.x):
+		for dy in range(PLAYER_SIZE.y):
+			world.set_cell(player_pos.x + dx, player_pos.y + dy, "")
 	player_pos = to
-	world.set_cell(player_pos.x, player_pos.y, MAT_PLAYER)
+	set_player(player_pos)
 
 
 func spawn_lava() -> void:
@@ -190,10 +211,8 @@ func spawn_lava() -> void:
 
 
 func check_player_died() -> bool:
-	for dx in range(-1, 2):
-		for dy in range(-1, 2):
-			if dx == 0 and dy == 0:
-				continue
+	for dx in range(-1, PLAYER_SIZE.x + 1):
+		for dy in range(-1, PLAYER_SIZE.y + 1):
 			var nx := player_pos.x + dx
 			var ny := player_pos.y + dy
 			if world.get_cell(nx, ny) == MAT_LAVA:
