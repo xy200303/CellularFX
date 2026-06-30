@@ -26,6 +26,16 @@
 - **温度可视化**：单元格颜色会随自身温度向热/冷色调插值。
 - **性能基准**：`demo/benchmark.gd` 测量 CPU 性能；`demo/benchmark_gpu.gd` 在窗口化环境下对比 CPU/GPU。
 
+## 截图
+
+![CellularFX：128×128 混合材料场景](screenshots/image.png)
+
+*128×128 世界：沙堆、水洼、木塔、燃油火焰与酸液腐蚀。*
+
+![CellularFX：256×256 洞穴与森林火灾](screenshots/cellularfx_screenshot.png)
+
+*256×256 世界：洞穴地形、水流与蔓延的森林火灾。*
+
 ## 性能参考
 
 以下数据在 AMD Ryzen 核显笔记本、Windows 11、Godot 4.6.2、MSVC release 构建下测得，仅供参考，实际性能因硬件而异。
@@ -71,7 +81,7 @@
 
 ### 方式二：手动安装
 
-1. 从 [Releases](https://github.com/yourname/cellularfx/releases) 下载最新版本。
+1. 从 [Releases](https://github.com/xy200303/CellularFX/releases) 下载最新版本。
 2. 将 `addons/cellular_automata_engine/` 文件夹复制到你的 Godot 项目中。
 3. 在 **项目 → 项目设置 → 插件 → CellularFX** 中启用插件。
 
@@ -181,7 +191,7 @@ func _process(_delta):
 ### 步骤
 
 ```bash
-git clone --recursive https://github.com/yourname/cellularfx.git
+git clone --recursive https://github.com/xy200303/CellularFX.git
 cd cellularfx
 scons platform=windows target=template_debug arch=x86_64 build_profile=build_profile.json -j4
 ```

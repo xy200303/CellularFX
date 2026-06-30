@@ -26,6 +26,16 @@ A high-performance **cellular automata / falling-sand engine** for Godot 4, writ
 - **Temperature visualization**: cell colors blend towards hot/cold tints based on per-cell temperature.
 - **Benchmark**: `demo/benchmark.gd` measures CPU performance across grid sizes; `demo/benchmark_gpu.gd` compares CPU and GPU in a window.
 
+## Screenshots
+
+![CellularFX: 128×128 mixed-material scene](screenshots/image.png)
+
+*128×128 world with sand pile, water pool, wood tower, oil fire, and acid corrosion.*
+
+![CellularFX: 256×256 cave and forest fire](screenshots/cellularfx_screenshot.png)
+
+*256×256 world with cave terrain, water flow, and a spreading forest fire.*
+
 ## Performance
 
 Measured on an AMD Ryzen laptop with integrated Radeon graphics, Windows 11, Godot 4.6.2, MSVC release build. Results are illustrative and will vary by hardware.
@@ -71,7 +81,7 @@ Search **"CellularFX"** in the Godot Asset Library and install it into your proj
 
 ### Option 2: Manual
 
-1. Download the latest release from the [Releases](https://github.com/yourname/cellularfx/releases) page.
+1. Download the latest release from the [Releases](https://github.com/xy200303/CellularFX/releases) page.
 2. Copy the `addons/cellular_automata_engine/` folder into your Godot project.
 3. Enable the plugin in **Project → Project Settings → Plugins → CellularFX**.
 
@@ -181,7 +191,7 @@ func _process(_delta):
 ### Steps
 
 ```bash
-git clone --recursive https://github.com/yourname/cellularfx.git
+git clone --recursive https://github.com/xy200303/CellularFX.git
 cd cellularfx
 scons platform=windows target=template_debug arch=x86_64 build_profile=build_profile.json -j4
 ```
