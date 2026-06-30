@@ -1,0 +1,13 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://demo/game_lava_escape.gd" id="1_dby6u"]
+
+[node name="LavaEscape" type="Node2D"]
+script = ExtResource("1_dby6u")
+
+[node name="CASWorld" type="CASWorld" parent="."]
+
+[node name="TextureRect" type="TextureRect" parent="."]
+offset_right = 1024.0
+offset_bottom = 1365.0
+stretch_mode = 1

@@ -237,7 +237,12 @@ Ref<Image> CASWorld::get_image() const {
 		cached_image = simulator->get_image();
 		image_dirty = false;
 	}
-	return cached_image;
+	if (cached_image.is_null()) {
+		return Ref<Image>();
+	}
+	// Return a duplicate so callers can freely resize/modify the image
+	// without corrupting the internal cache or the texture.
+	return cached_image->duplicate();
 }
 
 Ref<Texture2D> CASWorld::get_texture() {

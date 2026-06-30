@@ -36,6 +36,10 @@ A high-performance **cellular automata / falling-sand engine** for Godot 4, writ
 
 *256×256 world with cave terrain, water flow, and a spreading forest fire.*
 
+![CellularFX: Lava Escape mini-game](screenshots/lava_escape.png)
+
+*Lava Escape: a small game built with CellularFX. Dodge the falling magma and reach the exit at the top.*
+
 ## Performance
 
 Measured on an AMD Ryzen laptop with integrated Radeon graphics, Windows 11, Godot 4.6.2, MSVC release build. Results are illustrative and will vary by hardware.
@@ -84,6 +88,14 @@ Search **"CellularFX"** in the Godot Asset Library and install it into your proj
 1. Download the latest release from the [Releases](https://github.com/xy200303/CellularFX/releases) page.
 2. Copy the `addons/cellular_automata_engine/` folder into your Godot project.
 3. Enable the plugin in **Project → Project Settings → Plugins → CellularFX**.
+
+## Release Downloads
+
+Direct plugin package downloads by version (for Godot Asset Library or manual install):
+
+| Version | Download |
+|---------|----------|
+| v0.1.0 | [cellular_automata_engine.zip](https://raw.githubusercontent.com/xy200303/CellularFX/bdcd63c42804a3f657c2d37841715f82f21ce886/cellular_automata_engine.zip) |
 
 ## Quick Start
 

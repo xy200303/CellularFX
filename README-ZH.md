@@ -36,6 +36,10 @@
 
 *256×256 世界：洞穴地形、水流与蔓延的森林火灾。*
 
+![CellularFX：岩浆逃生小游戏](screenshots/lava_escape.png)
+
+*岩浆逃生：使用 CellularFX 制作的小游戏。躲避下落的岩浆，逃向顶部出口。*
+
 ## 性能参考
 
 以下数据在 AMD Ryzen 核显笔记本、Windows 11、Godot 4.6.2、MSVC release 构建下测得，仅供参考，实际性能因硬件而异。
@@ -84,6 +88,14 @@
 1. 从 [Releases](https://github.com/xy200303/CellularFX/releases) 下载最新版本。
 2. 将 `addons/cellular_automata_engine/` 文件夹复制到你的 Godot 项目中。
 3. 在 **项目 → 项目设置 → 插件 → CellularFX** 中启用插件。
+
+## 版本下载
+
+按版本列出的插件包直链（用于 Godot 资源平台或手动安装）：
+
+| 版本 | 下载 |
+|------|------|
+| v0.1.0 | [cellular_automata_engine.zip](https://raw.githubusercontent.com/xy200303/CellularFX/bdcd63c42804a3f657c2d37841715f82f21ce886/cellular_automata_engine.zip) |
 
 ## 快速开始
 
