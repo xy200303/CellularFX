@@ -172,7 +172,7 @@ func can_move_to(pos: Vector2i) -> bool:
 	for dx in range(PLAYER_SIZE.x):
 		for dy in range(PLAYER_SIZE.y):
 			var mat := world.get_cell(pos.x + dx, pos.y + dy)
-			if mat != "" and mat != MAT_SMOKE and mat != MAT_PLAYER:
+			if mat != "air" and mat != MAT_SMOKE and mat != MAT_PLAYER:
 				return false
 	return true
 
