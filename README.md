@@ -95,7 +95,7 @@ Direct plugin package downloads by version (for Godot Asset Library or manual in
 
 | Version | Download |
 |---------|----------|
-| v0.1.0 | [cellular_automata_engine.zip](https://raw.githubusercontent.com/xy200303/CellularFX/bdcd63c42804a3f657c2d37841715f82f21ce886/cellular_automata_engine.zip) |
+| v0.1.0 | [cellular_automata_engine.zip](https://raw.githubusercontent.com/xy200303/CellularFX/0b4fc9045cae316ed1bcaa6265414981fef8f5b6/cellular_automata_engine.zip) |
 
 ## Quick Start
 
